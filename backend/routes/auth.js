@@ -1,8 +1,6 @@
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const router = express.Router();
 const supabase = require("../utils/supabase");
-const { verifyToken } = require("../middleware/auth");
 
 // Register new user
 router.post("/register", async (req, res) => {
@@ -15,14 +13,19 @@ router.post("/register", async (req, res) => {
   try {
     console.log("Register request received:", { username, email });
 
+    // Check if email is valid (simple validation)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+
     // Register user with Supabase Auth
     const { data: authUser, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          username: username,
-        },
+        data: { username },
+        emailRedirectTo: `${process.env.CLIENT_URL}/auth/callback`,
       },
     });
 
@@ -40,47 +43,42 @@ router.post("/register", async (req, res) => {
 
     console.log("Auth user created:", authUser.user.id);
 
-    // Use a direct query to insert into users table
+    // Since Supabase may require email verification, we'll add the user to our
+    // users table even before verification to maintain data consistency
     try {
-      // Try a simple direct query to insert the user
-      const { data: newUser, error: dbError } = await supabase
-        .from("users")
-        .insert({
-          id: authUser.user.id,
-          username,
-          email,
-          created_at: new Date().toISOString(),
-        })
-        .select();
+      const { error: dbError } = await supabase.from("users").insert({
+        id: authUser.user.id,
+        username,
+        email,
+        created_at: new Date().toISOString(),
+      });
 
       if (dbError) {
         console.error("Database error inserting user:", dbError);
-
-        // Return success even if we couldn't insert into the users table
-        // The trigger should handle it if properly set up
+        // Continue anyway since the auth user was created
       }
-
-      console.log("Database insert response:", newUser);
     } catch (dbError) {
       console.error("Error during database insert:", dbError);
     }
 
-    // Create JWT token
-    const token = jwt.sign(
-      { id: authUser.user.id, username },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
+    // Get the session from auth response
+    const session = authUser.session;
 
-    // Return success regardless of whether the database insert worked
+    // Return the Supabase session tokens instead of creating our own JWT
     res.status(201).json({
       message: "User registered successfully",
-      token,
       user: {
         id: authUser.user.id,
         username,
         email,
       },
+      session: session
+        ? {
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            expires_at: new Date(session.expires_at).toISOString(),
+          }
+        : null,
     });
   } catch (error) {
     console.error("Registration error:", error);
@@ -111,49 +109,63 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    if (!authData || !authData.user) {
+      return res.status(400).json({ message: "Authentication failed" });
+    }
+
     console.log("Login successful for user ID:", authData.user.id);
 
-    // Get user profile
+    // Get user profile or create if doesn't exist
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("id, username, email")
       .eq("id", authData.user.id)
       .single();
 
-    if (userError) {
-      console.error("Error fetching user profile:", userError);
+    // If user profile doesn't exist in the users table, create it
+    if (userError || !user) {
+      const username =
+        authData.user.user_metadata?.username || email.split("@")[0];
 
-      // If user profile doesn't exist, create a basic one from auth data
+      try {
+        await supabase.from("users").insert({
+          id: authData.user.id,
+          username,
+          email: authData.user.email,
+          created_at: new Date().toISOString(),
+        });
+      } catch (insertError) {
+        console.error("Error creating user profile:", insertError);
+      }
+
+      // Return session with basic user info
       return res.json({
         message: "Login successful",
-        token: jwt.sign(
-          { id: authData.user.id, username: email.split("@")[0] },
-          process.env.JWT_SECRET,
-          { expiresIn: "1d" }
-        ),
         user: {
           id: authData.user.id,
-          username:
-            authData.user.user_metadata?.username || email.split("@")[0],
+          username,
           email: authData.user.email,
+        },
+        session: {
+          access_token: authData.session.access_token,
+          refresh_token: authData.session.refresh_token,
+          expires_at: new Date(authData.session.expires_at).toISOString(),
         },
       });
     }
 
-    // Create token
-    const token = jwt.sign(
-      { id: user.id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: "1d" }
-    );
-
+    // Return user profile with session tokens
     res.json({
       message: "Login successful",
-      token,
       user: {
         id: user.id,
         username: user.username,
         email: user.email,
+      },
+      session: {
+        access_token: authData.session.access_token,
+        refresh_token: authData.session.refresh_token,
+        expires_at: new Date(authData.session.expires_at).toISOString(),
       },
     });
   } catch (error) {
@@ -163,34 +175,93 @@ router.post("/login", async (req, res) => {
 });
 
 // Get current user
-router.get("/me", verifyToken, async (req, res) => {
+router.get("/me", async (req, res) => {
   try {
-    // Get user profile from Supabase
-    const { data: user, error } = await supabase
+    // Get the authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // Use Supabase to get user from token
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      console.error("Error fetching current user:", error);
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    // Get user profile from database
+    const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("id, username, email")
-      .eq("id", req.user.id)
+      .eq("id", user.id)
       .single();
 
-    if (error) {
-      console.error("Error fetching current user:", error);
-      return res.status(500).json({ message: error.message });
+    if (profileError) {
+      console.error("Error fetching user profile:", profileError);
+      // Return basic info if profile not in database
+      return res.json({
+        id: user.id,
+        username: user.user_metadata?.username || user.email.split("@")[0],
+        email: user.email,
+      });
     }
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.json(user);
+    res.json(userProfile);
   } catch (error) {
-    console.error(error.message);
+    console.error("Get current user error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Refresh token
+router.post("/refresh", async (req, res) => {
+  const { refresh_token } = req.body;
+
+  if (!refresh_token) {
+    return res.status(400).json({ message: "Refresh token is required" });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token,
+    });
+
+    if (error) {
+      console.error("Token refresh error:", error);
+      return res
+        .status(401)
+        .json({ message: "Invalid or expired refresh token" });
+    }
+
+    res.json({
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        expires_at: new Date(data.session.expires_at).toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Refresh token error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
 // Logout user
-router.post("/logout", verifyToken, async (req, res) => {
+router.post("/logout", async (req, res) => {
   try {
+    // Get the authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
     // Sign out from Supabase Auth
     const { error } = await supabase.auth.signOut();
 
