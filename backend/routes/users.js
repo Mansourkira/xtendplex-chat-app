@@ -8,7 +8,7 @@ router.get("/", verifyToken, async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from("users")
-      .select("id, username, email, created_at")
+      .select("id, username, email, status, role, created_at")
       .order("username", { ascending: true });
 
     if (error) {
@@ -27,7 +27,7 @@ router.get("/:id", verifyToken, async (req, res) => {
   try {
     const { data: user, error } = await supabase
       .from("users")
-      .select("id, username, email, created_at")
+      .select("id, username, email, status, role , created_at")
       .eq("id", req.params.id)
       .single();
 
@@ -166,6 +166,26 @@ router.get("/search/:query", verifyToken, async (req, res) => {
       .from("users")
       .select("id, username, email")
       .ilike("username", `%${req.params.query}%`)
+      .order("username");
+
+    if (error) {
+      return res.status(500).json({ message: error.message });
+    }
+
+    res.json(users);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Get all users for chat (except current user)
+router.get("/chat-users", verifyToken, async (req, res) => {
+  try {
+    const { data: users, error } = await supabase
+      .from("users")
+      .select("id, username, avatar, status")
+      .neq("id", req.user.id)
       .order("username");
 
     if (error) {
