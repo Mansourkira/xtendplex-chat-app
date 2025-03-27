@@ -60,7 +60,7 @@ router.get("/group/:groupId", verifyToken, async (req, res) => {
         is_edited,
         created_at,
         updated_at,
-        users:user_id (id, username)
+        users (id, username, avatar)
       `
       )
       .eq("group_id", req.params.groupId)
@@ -78,19 +78,219 @@ router.get("/group/:groupId", verifyToken, async (req, res) => {
       return res.status(500).json({ message: messagesError.message });
     }
 
+    // Get attachments for these messages
+    const messageIds = messages.map((msg) => msg.id);
+    const { data: attachments } = await supabase
+      .from("message_attachments")
+      .select("*")
+      .in("message_id", messageIds);
+
+    // Get reactions for these messages
+    const { data: reactions } = await supabase
+      .from("message_reactions")
+      .select(
+        `
+        id,
+        reaction,
+        message_id,
+        user_id,
+        created_at,
+        users (id, username, avatar)
+      `
+      )
+      .in("message_id", messageIds);
+
     // Format the response
-    const formattedMessages = messages.map((message) => ({
-      id: message.id,
-      content: message.content,
-      user_id: message.user_id,
-      parent_id: message.parent_id,
-      is_edited: message.is_edited,
-      created_at: message.created_at,
-      updated_at: message.updated_at,
-      user: message.users,
-    }));
+    const formattedMessages = messages.map((message) => {
+      // Find all attachments for this message
+      const messageAttachments =
+        attachments?.filter(
+          (attachment) => attachment.message_id === message.id
+        ) || [];
+
+      // Find all reactions for this message
+      const messageReactions =
+        reactions
+          ?.filter((reaction) => reaction.message_id === message.id)
+          .map((reaction) => ({
+            id: reaction.id,
+            reaction: reaction.reaction,
+            user: reaction.users,
+          })) || [];
+
+      return {
+        id: message.id,
+        content: message.content,
+        user_id: message.user_id,
+        parent_id: message.parent_id,
+        is_edited: message.is_edited,
+        created_at: message.created_at,
+        updated_at: message.updated_at,
+        user: message.users,
+        message_attachments: messageAttachments,
+        reactions: messageReactions,
+      };
+    });
 
     res.json(formattedMessages);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Get direct messages between users
+router.get("/direct/:userId", verifyToken, async (req, res) => {
+  const targetUserId = req.params.userId;
+  const currentUserId = req.user.id;
+
+  try {
+    // First check if a direct message group already exists between these users
+    const { data: existingGroups, error: groupError } = await supabase
+      .from("groups")
+      .select("id")
+      .eq("is_direct_message", true)
+      .order("created_at", { ascending: false });
+
+    if (groupError) {
+      return res.status(500).json({ message: groupError.message });
+    }
+
+    // Find a group that contains both users
+    let directMessageGroup = null;
+
+    if (existingGroups && existingGroups.length > 0) {
+      // Check each group's members to find one with both users
+      for (const group of existingGroups) {
+        const { data: members } = await supabase
+          .from("group_members")
+          .select("user_id")
+          .eq("group_id", group.id);
+
+        const userIds = members.map((m) => m.user_id);
+
+        if (
+          userIds.includes(currentUserId) &&
+          userIds.includes(targetUserId) &&
+          userIds.length === 2
+        ) {
+          directMessageGroup = group;
+          break;
+        }
+      }
+    }
+
+    let groupId;
+
+    if (directMessageGroup) {
+      // Use existing direct message group
+      groupId = directMessageGroup.id;
+    } else {
+      // Create a new direct message group
+      const { data: newGroup, error: createError } = await supabase
+        .from("groups")
+        .insert({
+          name: "Direct Message",
+          is_direct_message: true,
+          created_by: currentUserId,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        return res.status(500).json({ message: createError.message });
+      }
+
+      // Add both users to the group
+      await supabase.from("group_members").insert([
+        { group_id: newGroup.id, user_id: currentUserId, role: "member" },
+        { group_id: newGroup.id, user_id: targetUserId, role: "member" },
+      ]);
+
+      groupId = newGroup.id;
+    }
+
+    // Now get messages from this group
+    const { data: messages, error: messagesError } = await supabase
+      .from("messages")
+      .select(
+        `
+        id,
+        content,
+        user_id,
+        parent_id,
+        is_edited,
+        created_at,
+        updated_at,
+        users (id, username, avatar)
+      `
+      )
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: true });
+
+    if (messagesError) {
+      return res.status(500).json({ message: messagesError.message });
+    }
+
+    // Get attachments for these messages
+    const messageIds = messages.map((msg) => msg.id);
+    const { data: attachments } = await supabase
+      .from("message_attachments")
+      .select("*")
+      .in("message_id", messageIds);
+
+    // Get reactions for these messages
+    const { data: reactions } = await supabase
+      .from("message_reactions")
+      .select(
+        `
+        id,
+        reaction,
+        message_id,
+        user_id,
+        created_at,
+        users (id, username, avatar)
+      `
+      )
+      .in("message_id", messageIds);
+
+    // Format the response
+    const formattedMessages = messages.map((message) => {
+      // Find all attachments for this message
+      const messageAttachments =
+        attachments?.filter(
+          (attachment) => attachment.message_id === message.id
+        ) || [];
+
+      // Find all reactions for this message
+      const messageReactions =
+        reactions
+          ?.filter((reaction) => reaction.message_id === message.id)
+          .map((reaction) => ({
+            id: reaction.id,
+            reaction: reaction.reaction,
+            user: reaction.users,
+          })) || [];
+
+      return {
+        id: message.id,
+        content: message.content,
+        user_id: message.user_id,
+        parent_id: message.parent_id,
+        is_edited: message.is_edited,
+        created_at: message.created_at,
+        updated_at: message.updated_at,
+        user: message.users,
+        message_attachments: messageAttachments,
+        reactions: messageReactions,
+      };
+    });
+
+    // Add group_id to response for socket connection
+    res.json({
+      group_id: groupId,
+      messages: formattedMessages,
+    });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Server error" });
