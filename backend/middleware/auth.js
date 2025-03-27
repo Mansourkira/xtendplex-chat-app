@@ -1,36 +1,39 @@
-const jwt = require("jsonwebtoken");
 const supabase = require("../utils/supabase");
 
-// Middleware to verify JWT token
+// Middleware to verify JWT token using Supabase
 const verifyToken = async (req, res, next) => {
-  // Get token from header
-  const token = req.header("x-auth-token");
-
-  // Check if no token
-  if (!token) {
-    return res.status(401).json({ message: "No token, authorization denied" });
-  }
-
   try {
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Get token from authorization header
+    const authHeader = req.headers.authorization;
 
-    // Verify user exists in Supabase
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("id, username")
-      .eq("id", decoded.id)
-      .single();
-
-    if (error || !user) {
-      return res.status(401).json({ message: "Invalid user" });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
     }
 
-    // Add user from payload to request
-    req.user = decoded;
+    const token = authHeader.split(" ")[1];
+
+    // Verify token with Supabase
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      console.error("Token verification error:", error);
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    // Add user data to the request
+    req.user = {
+      id: user.id,
+      email: user.email,
+      username: user.user_metadata?.username,
+    };
+
     next();
   } catch (error) {
-    res.status(401).json({ message: "Token is not valid" });
+    console.error("Auth middleware error:", error);
+    res.status(401).json({ message: "Authentication failed" });
   }
 };
 
