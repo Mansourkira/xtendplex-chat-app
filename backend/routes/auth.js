@@ -10,6 +10,9 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ message: "All fields are required" });
   }
 
+  // Set default role to 'admin' for development purposes
+  const userRole = "admin";
+
   try {
     console.log("Register request received:", { username, email });
 
@@ -24,7 +27,7 @@ router.post("/register", async (req, res) => {
       email,
       password,
       options: {
-        data: { username },
+        data: { username, role: userRole },
         emailRedirectTo: `${process.env.CLIENT_URL}/auth/callback`,
       },
     });
@@ -51,6 +54,8 @@ router.post("/register", async (req, res) => {
         username,
         email,
         created_at: new Date().toISOString(),
+        status: "offline",
+        role: userRole,
       });
 
       if (dbError) {
@@ -71,6 +76,8 @@ router.post("/register", async (req, res) => {
         id: authUser.user.id,
         username,
         email,
+        status: "offline",
+        role: userRole,
       },
       session: session
         ? {
@@ -118,7 +125,7 @@ router.post("/login", async (req, res) => {
     // Get user profile or create if doesn't exist
     const { data: user, error: userError } = await supabase
       .from("users")
-      .select("id, username, email")
+      .select("id, username, email, status, role")
       .eq("id", authData.user.id)
       .single();
 
@@ -126,6 +133,7 @@ router.post("/login", async (req, res) => {
     if (userError || !user) {
       const username =
         authData.user.user_metadata?.username || email.split("@")[0];
+      const userRole = authData.user.user_metadata?.role || "user";
 
       try {
         await supabase.from("users").insert({
@@ -133,10 +141,18 @@ router.post("/login", async (req, res) => {
           username,
           email: authData.user.email,
           created_at: new Date().toISOString(),
+          status: "online",
+          role: userRole,
         });
       } catch (insertError) {
         console.error("Error creating user profile:", insertError);
       }
+
+      // Update user status to online
+      await supabase
+        .from("users")
+        .update({ status: "online" })
+        .eq("id", authData.user.id);
 
       // Return session with basic user info
       return res.json({
@@ -145,6 +161,8 @@ router.post("/login", async (req, res) => {
           id: authData.user.id,
           username,
           email: authData.user.email,
+          status: "online",
+          role: userRole,
         },
         session: {
           access_token: authData.session.access_token,
@@ -154,6 +172,9 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Update user status to online
+    await supabase.from("users").update({ status: "online" }).eq("id", user.id);
+
     // Return user profile with session tokens
     res.json({
       message: "Login successful",
@@ -161,6 +182,8 @@ router.post("/login", async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
+        status: "online",
+        role: user.role,
       },
       session: {
         access_token: authData.session.access_token,
@@ -199,7 +222,7 @@ router.get("/me", async (req, res) => {
     // Get user profile from database
     const { data: userProfile, error: profileError } = await supabase
       .from("users")
-      .select("id, username, email")
+      .select("id, username, email, status, role")
       .eq("id", user.id)
       .single();
 
@@ -210,6 +233,8 @@ router.get("/me", async (req, res) => {
         id: user.id,
         username: user.user_metadata?.username || user.email.split("@")[0],
         email: user.email,
+        status: "offline",
+        role: user.user_metadata?.role || "user",
       });
     }
 
@@ -262,6 +287,22 @@ router.post("/logout", async (req, res) => {
       return res.status(401).json({ message: "No token provided" });
     }
 
+    const token = authHeader.split(" ")[1];
+
+    // Get user ID from token
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
+
+    if (!userError && user) {
+      // Update user status to offline
+      await supabase
+        .from("users")
+        .update({ status: "offline" })
+        .eq("id", user.id);
+    }
+
     // Sign out from Supabase Auth
     const { error } = await supabase.auth.signOut();
 
@@ -273,6 +314,52 @@ router.post("/logout", async (req, res) => {
     res.json({ message: "Logged out successfully" });
   } catch (error) {
     console.error("Logout error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Add new endpoint to update user status
+router.patch("/status", async (req, res) => {
+  const { status } = req.body;
+
+  if (!status || !["online", "offline", "away"].includes(status)) {
+    return res
+      .status(400)
+      .json({ message: "Valid status is required (online, offline, away)" });
+  }
+
+  try {
+    // Get the authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    // Get user from token
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    // Update user status
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ status })
+      .eq("id", user.id);
+
+    if (updateError) {
+      return res.status(500).json({ message: "Failed to update status" });
+    }
+
+    res.json({ message: "Status updated successfully", status });
+  } catch (error) {
+    console.error("Update status error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
