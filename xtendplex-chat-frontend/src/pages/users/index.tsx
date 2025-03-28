@@ -1,4 +1,15 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +58,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -56,15 +68,14 @@ const UserManagementPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { user } = useAuth();
   const navigate = useNavigate();
-  console.log(user);
-  // Check if current user is admin
   const isAdmin = user?.role === "admin";
 
   useEffect(() => {
-    // Fetch users regardless of role (all authenticated users can view)
     fetchUsers();
   }, []);
 
@@ -72,7 +83,7 @@ const UserManagementPage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await UserService.getUsers(1, 100); // Get up to 100 users
+      const response = await UserService.getUsers(1, 100);
       setUsers(response.users);
       setFilteredUsers(response.users);
     } catch (err) {
@@ -83,11 +94,9 @@ const UserManagementPage = () => {
     }
   };
 
-  // Apply filters whenever search/status/role filters change
   useEffect(() => {
     let result = [...users];
 
-    // Apply search filter
     if (searchQuery) {
       result = result.filter(
         (user) =>
@@ -96,12 +105,10 @@ const UserManagementPage = () => {
       );
     }
 
-    // Apply status filter
     if (statusFilter) {
       result = result.filter((user) => user.status === statusFilter);
     }
 
-    // Apply role filter
     if (roleFilter) {
       result = result.filter((user) => user.role === roleFilter);
     }
@@ -147,31 +154,33 @@ const UserManagementPage = () => {
     setRoleFilter(null);
   };
 
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    try {
+      await UserService.deleteUser(selectedUser.id);
+      toast.success("User deleted successfully");
+      fetchUsers();
+    } catch (err) {
+      toast.error("Failed to delete user");
+      console.error("Error deleting user:", err);
+    } finally {
+      setShowDeleteDialog(false);
+      setSelectedUser(null);
+    }
+  };
+
   return (
-    <div className="h-full overflow-auto">
-      {!isAdmin && (
-        <Alert className="mb-4">
-          <AlertTitle className="flex items-center">
-            <UserCircle className="mr-2 h-4 w-4" />
-            View Only Mode
-          </AlertTitle>
-          <AlertDescription>
-            You are viewing this page in read-only mode. Contact an
-            administrator if you need access to add, edit, or delete users.
-          </AlertDescription>
-        </Alert>
-      )}
-      <Card className="h-full border-none shadow-none">
+    <div className="h-full overflow-auto p-6">
+      <Card className="border shadow-sm">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-xl font-bold">
-                User Management
-              </CardTitle>
+              <CardTitle className="text-2xl font-bold">Users</CardTitle>
               <CardDescription>
                 {isAdmin
-                  ? "Manage user accounts, roles and permissions"
-                  : "View user accounts and status"}
+                  ? "Manage user accounts and permissions"
+                  : "View user accounts"}
               </CardDescription>
             </div>
             {isAdmin && (
@@ -193,13 +202,13 @@ const UserManagementPage = () => {
             </Alert>
           )}
 
-          <div className="flex items-center gap-4 mb-4 flex-wrap">
+          <div className="flex items-center gap-4 mb-6">
             {/* Search */}
-            <div className="relative flex-1 min-w-[240px]">
+            <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search by username or email..."
+                placeholder="Search users..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -270,7 +279,7 @@ const UserManagementPage = () => {
             </div>
           </div>
 
-          <div className="rounded-md border overflow-auto">
+          <div className="rounded-lg border overflow-hidden">
             <Table>
               <TableCaption>
                 {filteredUsers.length === 0
@@ -322,26 +331,31 @@ const UserManagementPage = () => {
                 ) : (
                   filteredUsers.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {user.avatar ? (
-                            <img
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage
                               src={user.avatar}
                               alt={user.username}
-                              className="h-8 w-8 rounded-full object-cover"
                             />
-                          ) : (
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                              <UserCircle className="h-5 w-5" />
+                            <AvatarFallback>
+                              {user.username?.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="font-medium">{user.username}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {user.email}
                             </div>
-                          )}
-                          <span>{user.username}</span>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell>{user.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.email}
+                      </TableCell>
                       <TableCell>{getStatusBadge(user.status)}</TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
                         {user.created_at
                           ? new Date(user.created_at).toLocaleDateString()
                           : "N/A"}
@@ -374,13 +388,11 @@ const UserManagementPage = () => {
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
                                   onClick={() => {
-                                    // Would implement delete functionality here
-                                    alert(
-                                      "Delete user functionality would go here"
-                                    );
+                                    setSelectedUser(user);
+                                    setShowDeleteDialog(true);
                                   }}
+                                  className="text-destructive"
                                 >
                                   <Trash className="mr-2 h-4 w-4" />
                                   Delete User
@@ -398,6 +410,31 @@ const UserManagementPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent className="bg-background border-2">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-semibold">
+              Delete User
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to delete {selectedUser?.username}? This
+              action cannot be undone and will remove all their data from the
+              system.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel className="border-2">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 border-2 border-destructive"
+              onClick={handleDeleteUser}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
