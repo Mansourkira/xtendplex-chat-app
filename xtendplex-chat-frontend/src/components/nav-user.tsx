@@ -21,8 +21,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {  useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToaster } from "@/hooks/use-toaster";
 import AuthService, { UserStatus } from "@/services/AuthService";
 import { useState } from "react";
 
@@ -38,7 +38,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar();
   const { logout, user: authUser, setUser } = useAuth();
-  const { toast } = useToast();
+  const { success, error, info, warning } = useToaster();
   const [currentStatus, setCurrentStatus] = useState<UserStatus>(
     (authUser?.status as UserStatus) || "online"
   );
@@ -76,17 +76,10 @@ export function NavUser({
         });
       }
 
-      toast({
-        title: "Status updated",
-        description: `Your status is now ${status}`,
-      });
-    } catch (error) {
+      success(`Your status is now ${status}`);
+    } catch (error: any) {
       console.error("Error updating status:", error);
-      toast({
-        title: "Error updating status",
-        description: "Failed to update your status. Please try again.",
-        variant: "destructive",
-      });
+      error("Failed to update your status. Please try again.");
     }
   };
 
