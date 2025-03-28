@@ -9,7 +9,7 @@ import { PaperclipIcon, SendIcon, SmileIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface ChatInputProps {
-  chatId: string;
+  chatId: string | undefined;
   type: "individual" | "group";
 }
 
@@ -26,6 +26,7 @@ export function ChatInput({ chatId, type }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Use null initially and set it after determining the actual group ID
@@ -37,19 +38,53 @@ export function ChatInput({ chatId, type }: ChatInputProps) {
   // Initialize the actual group ID
   useEffect(() => {
     const initializeGroupId = async () => {
-      if (type === "individual") {
-        try {
-          // For individual chats, we need to get the group ID from the server
-          const response = await ChatService.getDirectMessages(chatId);
-          if (response.group_id) {
-            setActualGroupId(response.group_id);
+      if (!chatId) {
+        setActualGroupId(null);
+        setError(null);
+        return;
+      }
+
+      try {
+        if (type === "individual") {
+          try {
+            // For individual chats, we need to get the group ID from the server
+            const response = await ChatService.getDirectMessages(chatId);
+            if (response.group_id) {
+              setActualGroupId(response.group_id);
+              setError(null);
+            } else {
+              setError("Unable to establish a direct message channel.");
+              setActualGroupId(null);
+            }
+          } catch (err: any) {
+            console.error("Error getting direct message group ID:", err);
+
+            // Check if it's an authentication error
+            if (err.response && err.response.status === 401) {
+              setError(
+                "You need to be signed in to start a direct message conversation."
+              );
+            } else if (err.response && err.response.status === 500) {
+              setError(
+                "Server error while creating direct message. Please try again later."
+              );
+            } else {
+              setError(
+                "Unable to connect to this chat. The user may not exist."
+              );
+            }
+
+            setActualGroupId(null);
           }
-        } catch (err) {
-          console.error("Error getting direct message group ID:", err);
+        } else {
+          // For group chats, the chat ID is the group ID
+          setActualGroupId(chatId);
+          setError(null);
         }
-      } else {
-        // For group chats, the chat ID is the group ID
-        setActualGroupId(chatId);
+      } catch (error) {
+        console.error("Unexpected error initializing chat:", error);
+        setError("Unable to initialize chat. Please try again.");
+        setActualGroupId(null);
       }
     };
 
@@ -127,23 +162,47 @@ export function ChatInput({ chatId, type }: ChatInputProps) {
     // Make sure we have a group ID before sending
     if (!actualGroupId) {
       console.error("Cannot send message: Group ID not available");
+      setError("Unable to send message. Connection to chat not established.");
       return;
     }
 
-    // Send message via socket
-    socket.sendMessage(
-      message.trim(),
-      undefined, // parentId for replies (not implemented yet)
-      attachments.length > 0 ? attachments : undefined
-    );
+    console.log("Sending message:", {
+      content: message.trim(),
+      groupId: actualGroupId,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    });
 
-    // Clear inputs
-    setMessage("");
-    setAttachments([]);
+    try {
+      // Send message via socket
+      socket.sendMessage(
+        message.trim(),
+        undefined, // parentId for replies (not implemented yet)
+        attachments.length > 0 ? attachments : undefined
+      );
+
+      // Clear inputs
+      setMessage("");
+      setAttachments([]);
+      // Clear any previous errors
+      setError(null);
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError("Failed to send message. Please try again.");
+    }
   };
+
+  // Don't show input if no chat is selected
+  if (!chatId) {
+    return null;
+  }
 
   return (
     <form onSubmit={handleSubmit} className="border-t p-4">
+      {error && (
+        <div className="mb-3 p-2 bg-destructive/10 text-destructive text-sm rounded-md">
+          {error}
+        </div>
+      )}
       {/* Display attachments */}
       {attachments.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
@@ -214,7 +273,9 @@ export function ChatInput({ chatId, type }: ChatInputProps) {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              handleSubmit(e);
+              if (message.trim() || attachments.length > 0) {
+                handleSubmit(e);
+              }
             }
           }}
           onInput={handleTyping}

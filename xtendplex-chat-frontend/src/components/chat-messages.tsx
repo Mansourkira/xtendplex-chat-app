@@ -11,7 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
 interface ChatMessagesProps {
-  chatId: string;
+  chatId: string | undefined;
   type: "individual" | "group";
 }
 
@@ -40,28 +40,69 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
 
   // Fetch messages
   const fetchMessages = async () => {
+    // Don't fetch messages if no valid chatId is provided
+    if (!chatId || chatId === "undefined") {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       let fetchedMessages: Message[] = [];
 
       if (type === "individual") {
-        const response = await ChatService.getDirectMessages(chatId);
-        fetchedMessages = response.messages || [];
+        try {
+          const response = await ChatService.getDirectMessages(chatId);
+          fetchedMessages = response.messages || [];
 
-        // If we got a group_id from the direct messages response, update our groupId
-        if (response.group_id) {
-          setActualGroupId(response.group_id);
-          socket.joinGroup(response.group_id);
+          // If we got a group_id from the direct messages response, update our groupId
+          if (response.group_id) {
+            setActualGroupId(response.group_id);
+            socket.joinGroup(response.group_id);
+          }
+        } catch (directMsgError: any) {
+          console.error("Error fetching direct messages:", directMsgError);
+
+          // Check if it's an authentication error
+          if (
+            directMsgError.response &&
+            directMsgError.response.status === 401
+          ) {
+            setError("You must be signed in to access direct messages.");
+          } else if (
+            directMsgError.response &&
+            directMsgError.response.status === 500
+          ) {
+            setError(
+              "Server error while setting up direct messages. The system creates a private group for your conversation."
+            );
+          } else {
+            setError(
+              "Unable to load direct messages. The user may not exist or the server is unavailable."
+            );
+          }
+
+          setLoading(false);
+          return;
         }
       } else {
         // For group messages
-        fetchedMessages = await ChatService.getGroupMessages(chatId);
+        try {
+          fetchedMessages = await ChatService.getGroupMessages(chatId);
 
-        // Set the actual group ID for socket communication
-        setActualGroupId(chatId);
+          // Set the actual group ID for socket communication
+          setActualGroupId(chatId);
 
-        // Join the group for socket communication
-        socket.joinGroup(chatId);
+          // Join the group for socket communication
+          socket.joinGroup(chatId);
+        } catch (groupMsgError) {
+          console.error("Error fetching group messages:", groupMsgError);
+          setError(
+            "Unable to load group messages. The group may not exist or the server is unavailable."
+          );
+          setLoading(false);
+          return;
+        }
       }
 
       setMessages(fetchedMessages);
@@ -69,7 +110,7 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
         fetchedMessages[fetchedMessages.length - 1]?.id || null;
     } catch (err) {
       console.error("Error fetching messages:", err);
-      setError("Failed to load messages");
+      setError("Failed to load messages. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -96,10 +137,17 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
 
       // Only add message if it's not already in the list
       setMessages((prevMessages) => {
+        // Check if message already exists
         if (prevMessages.some((m) => m.id === message.id)) {
           return prevMessages;
         }
-        return [...prevMessages, message];
+
+        // Add new message and sort by timestamp
+        const newMessages = [...prevMessages, message];
+        return newMessages.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
       });
 
       // If this is a new message, scroll to bottom
@@ -122,12 +170,79 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
       }
     };
 
-    socket.onMessage(handleNewMessage);
-
-    return () => {
-      // Clean up the message listener when the component unmounts or changes
+    // Listen for message updates
+    const handleMessageUpdate = (updatedMessage: Message) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === updatedMessage.id ? updatedMessage : msg
+        )
+      );
     };
-  }, [socket, actualGroupId, messages, typingUsers]);
+
+    // Listen for message deletions
+    const handleMessageDelete = (messageId: string) => {
+      setMessages((prevMessages) =>
+        prevMessages.filter((msg) => msg.id !== messageId)
+      );
+    };
+
+    // Listen for reactions
+    const handleReactionAdd = (reaction: {
+      id: string;
+      message_id: string;
+      reaction: string;
+      user: { id: string; username: string; avatar: string | null };
+    }) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) => {
+          if (msg.id === reaction.message_id) {
+            return {
+              ...msg,
+              reactions: [...(msg.reactions || []), reaction],
+            };
+          }
+          return msg;
+        })
+      );
+    };
+
+    const handleReactionRemove = (data: {
+      messageId: string;
+      userId: string;
+      reaction: string;
+    }) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) => {
+          if (msg.id === data.messageId) {
+            return {
+              ...msg,
+              reactions: (msg.reactions || []).filter(
+                (r) =>
+                  !(r.user.id === data.userId && r.reaction === data.reaction)
+              ),
+            };
+          }
+          return msg;
+        })
+      );
+    };
+
+    // Register all event listeners
+    socket.onMessage(handleNewMessage);
+    socket.onMessageUpdate(handleMessageUpdate);
+    socket.onMessageDelete(handleMessageDelete);
+    socket.onReactionAdded(handleReactionAdd);
+    socket.onReactionRemoved(handleReactionRemove);
+
+    // Cleanup listeners on unmount or when chat changes
+    return () => {
+      socket.offMessage(handleNewMessage);
+      socket.offMessageUpdate(handleMessageUpdate);
+      socket.offMessageDelete(handleMessageDelete);
+      socket.offReactionAdded(handleReactionAdd);
+      socket.offReactionRemoved(handleReactionRemove);
+    };
+  }, [socket, actualGroupId, typingUsers]);
 
   // Listen for typing notifications
   useEffect(() => {
@@ -180,6 +295,17 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
   const isCurrentUser = (userId: string) => {
     return userId === user?.id;
   };
+
+  // Show a message if no chat is selected
+  if (!chatId || chatId === "undefined") {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4">
+        <p className="text-muted-foreground">
+          Select a member or group to start chatting
+        </p>
+      </div>
+    );
+  }
 
   if (loading && messages.length === 0) {
     return (
