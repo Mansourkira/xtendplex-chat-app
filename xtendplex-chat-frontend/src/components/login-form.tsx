@@ -84,11 +84,11 @@ export function LoginForm({
               </div>
               <div className="grid gap-6">
                 <div className="grid gap-3">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Username or Email</Label>
                   <Input
                     id="email"
-                    type="email"
-                    placeholder="m@example.com"
+                    type="text"
+                    placeholder="username or m@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
