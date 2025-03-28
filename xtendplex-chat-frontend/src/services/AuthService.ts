@@ -96,6 +96,10 @@ const AuthService = {
         "/auth/refresh",
         {
           refresh_token: refreshToken,
+        },
+        {
+          // Don't retry this request to avoid infinite loops
+          skipRetry: true,
         }
       );
 
@@ -107,7 +111,17 @@ const AuthService = {
       }
 
       return null;
-    } catch (_error) {
+    } catch (error) {
+      // If we hit a rate limit, don't clear tokens - just return null
+      const axiosError = error as any;
+      if (axiosError.response?.status === 429) {
+        console.warn("Token refresh rate limited. Will try again later.");
+        return null;
+      }
+
+      // For other errors, clear tokens
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
       return null;
     }
   },

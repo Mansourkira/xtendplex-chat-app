@@ -1,31 +1,49 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SocketService } from "../services";
 import { Message } from "../services/ChatService";
 
 // Hook for using the socket service in React components
 export const useSocket = (groupId?: string) => {
   const unsubscribe = useRef<Array<() => void>>([]);
+  const [isConnected, setIsConnected] = useState(false);
 
   // Connect to socket on mount
   useEffect(() => {
     SocketService.init();
     SocketService.connect();
 
+    // Set up connection status listener
+    const connectionStatusListener = SocketService.on("connect", () => {
+      console.log("Socket connected event in hook");
+      setIsConnected(true);
+    });
+
+    const disconnectListener = SocketService.on("disconnect", () => {
+      console.log("Socket disconnected event in hook");
+      setIsConnected(false);
+    });
+
+    // Check initial connection status
+    setIsConnected(SocketService.isConnected());
+
     // Cleanup on unmount
     return () => {
       // Don't disconnect so socket stays alive between route changes
       // Just clean up listeners
       unsubscribe.current.forEach((unsub) => unsub());
+      connectionStatusListener();
+      disconnectListener();
       unsubscribe.current = [];
     };
   }, []);
 
-  // Join group if groupId provided
+  // Join group if groupId provided and socket is connected
   useEffect(() => {
-    if (groupId && SocketService.isConnected()) {
+    if (groupId && isConnected) {
+      console.log("Joining group in hook", groupId);
       SocketService.joinGroup(groupId);
     }
-  }, [groupId, SocketService.isConnected()]);
+  }, [groupId, isConnected]);
 
   // Function to send a message
   const sendMessage = (
@@ -43,6 +61,11 @@ export const useSocket = (groupId?: string) => {
       return;
     }
 
+    if (!isConnected) {
+      console.error("Socket not connected, cannot send message");
+      return;
+    }
+
     SocketService.sendMessage({
       content,
       groupId,
@@ -52,10 +75,9 @@ export const useSocket = (groupId?: string) => {
   };
 
   // Function to send typing notification
-  // This function can be called with either:
-  // - Just a username (using the hook's groupId)
-  // - Specific groupId and username
   const sendTyping = (groupIdOrUsername: string, username?: string) => {
+    if (!isConnected) return;
+
     if (!username) {
       // Called with just username, use the current groupId
       if (!groupId) return;
@@ -68,7 +90,7 @@ export const useSocket = (groupId?: string) => {
 
   // Function to add reaction to a message
   const addReaction = (messageId: string, reaction: string) => {
-    if (!groupId) return;
+    if (!groupId || !isConnected) return;
     SocketService.addReaction(messageId, groupId, reaction);
   };
 
@@ -111,15 +133,85 @@ export const useSocket = (groupId?: string) => {
     return unsub;
   };
 
+  const onMessageUpdate = (callback: (message: Message) => void) => {
+    const unsub = SocketService.on("message_update", callback);
+    unsubscribe.current.push(unsub);
+    return unsub;
+  };
+
+  const onMessageDelete = (callback: (messageId: string) => void) => {
+    const unsub = SocketService.on("message_delete", callback);
+    unsubscribe.current.push(unsub);
+    return unsub;
+  };
+
+  // Function to off a listener for incoming messages
+  const offMessage = (callback: (message: Message) => void) => {
+    SocketService.offMessage(callback);
+  };
+
+  // Function to off a listener for message updates
+  const offMessageUpdate = (callback: (message: Message) => void) => {
+    SocketService.offMessageUpdate(callback);
+  };
+
+  // Function to off a listener for message deletes
+  const offMessageDelete = (callback: (messageId: string) => void) => {
+    SocketService.offMessageDelete(callback);
+  };
+
+  // Function to off a listener for reaction adds
+  const offReactionAdd = (callback: (reaction: any) => void) => {
+    SocketService.offReactionAdd(callback);
+  };
+
+  // Function to off a listener for reaction removes
+  const offReactionRemove = (
+    callback: (data: {
+      messageId: string;
+      userId: string;
+      reaction: string;
+    }) => void
+  ) => {
+    SocketService.offReactionRemove(callback);
+  };
+
+  const offReactionAdded = (callback: (reaction: any) => void) => {
+    SocketService.offReactionAdd(callback);
+  };
+
+  const offReactionRemoved = (
+    callback: (data: {
+      messageId: string;
+      userId: string;
+      reaction: string;
+    }) => void
+  ) => {
+    SocketService.offReactionRemove(callback);
+  };
+
   return {
     sendMessage,
     sendTyping,
     addReaction,
     onMessage,
+    onMessageUpdate,
+    onMessageDelete,
     onTyping,
     onReactionAdded,
     onReactionRemoved,
-    isConnected: SocketService.isConnected,
-    joinGroup: (id: string) => SocketService.joinGroup(id),
+    offMessageUpdate,
+    offMessageDelete,
+    offMessage,
+    offReactionAdded,
+    offReactionRemoved,
+    offReactionAdd,
+    offReactionRemove,
+    isConnected,
+    joinGroup: (id: string) => {
+      if (isConnected) {
+        SocketService.joinGroup(id);
+      }
+    },
   };
 };

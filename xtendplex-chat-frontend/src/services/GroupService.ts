@@ -7,18 +7,23 @@ export interface Group {
   name: string;
   description?: string;
   avatar?: string;
-  createdAt: string;
-  updatedAt: string;
-  ownerId: string;
-  members: GroupMember[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  is_direct_message: boolean;
+  last_message?: {
+    content: string;
+    user_id: string;
+    created_at: string;
+  };
+  members?: GroupMember[];
 }
 
 export interface GroupMember {
-  id: string;
-  userId: string;
-  groupId: string;
-  role: "owner" | "admin" | "member";
-  joinedAt: string;
+  user_id: string;
+  group_id: string;
+  role: "admin" | "member";
+  joined_at: string;
   user?: User;
 }
 

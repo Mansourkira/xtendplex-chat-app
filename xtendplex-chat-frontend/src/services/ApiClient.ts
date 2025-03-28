@@ -3,6 +3,12 @@ import AuthService from "./AuthService";
 
 const API_URL = "http://localhost:3000/api";
 
+// Track token refresh attempts to prevent infinite loops
+let isRefreshing = false;
+let refreshCooldown = false;
+let lastRefreshTime = 0;
+const REFRESH_COOLDOWN_MS = 10000; // 10 seconds cooldown
+
 class ApiClient {
   private static instance: ApiClient;
   private api: any;
@@ -40,13 +46,31 @@ class ApiClient {
         if (
           error.response?.status === 401 &&
           !originalRequest._retry &&
-          localStorage.getItem("refresh_token")
+          localStorage.getItem("refresh_token") &&
+          !isRefreshing &&
+          !refreshCooldown
         ) {
           originalRequest._retry = true;
 
+          // Check if we need to wait before refreshing again
+          const now = Date.now();
+          if (now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
+            console.log(
+              "Too many refresh attempts, waiting before trying again"
+            );
+            refreshCooldown = true;
+            setTimeout(() => {
+              refreshCooldown = false;
+            }, REFRESH_COOLDOWN_MS);
+            return Promise.reject(error);
+          }
+
           try {
+            isRefreshing = true;
             // Try to refresh the token
             const session = await AuthService.refreshToken();
+            lastRefreshTime = Date.now();
+            isRefreshing = false;
 
             if (session) {
               // Update the original request with new token
@@ -55,8 +79,26 @@ class ApiClient {
             }
           } catch (refreshError) {
             // Refresh failed, logout the user
-            AuthService.logout();
-            return Promise.reject(refreshError);
+            isRefreshing = false;
+            refreshCooldown = true;
+            setTimeout(() => {
+              refreshCooldown = false;
+            }, REFRESH_COOLDOWN_MS);
+
+            console.error("Token refresh failed:", refreshError);
+            // Only logout if it's a serious auth error, not just rate limit
+            if (
+              refreshError &&
+              typeof refreshError === "object" &&
+              "response" in refreshError &&
+              refreshError.response &&
+              typeof refreshError.response === "object" &&
+              "status" in refreshError.response &&
+              refreshError.response.status !== 429
+            ) {
+              AuthService.logout();
+            }
+            return Promise.reject(error);
           }
         }
 
