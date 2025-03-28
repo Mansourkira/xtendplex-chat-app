@@ -59,7 +59,13 @@ const AuthService = {
     if (response.session) {
       localStorage.setItem("access_token", response.session.access_token);
       localStorage.setItem("refresh_token", response.session.refresh_token);
-      localStorage.setItem("user", JSON.stringify(response.user));
+
+      // Update user status to online
+      await AuthService.updateStatus("online");
+
+      // Save user with online status
+      const userWithStatus = { ...response.user, status: "online" };
+      localStorage.setItem("user", JSON.stringify(userWithStatus));
 
       // Reinitialize socket with new token
       socketService.disconnect();
@@ -72,7 +78,10 @@ const AuthService = {
 
   logout: async () => {
     try {
+      // Update status to offline before logging out
+      await AuthService.updateStatus("offline");
       await apiClient.post("/auth/logout");
+      socketService.disconnect();
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("user");
@@ -141,7 +150,7 @@ const AuthService = {
     status: UserStatus
   ): Promise<{ message: string; status: string }> => {
     try {
-      return await apiClient.patch<{ message: string; status: string }>(
+      return await apiClient.put<{ message: string; status: string }>(
         "/auth/status",
         { status }
       );

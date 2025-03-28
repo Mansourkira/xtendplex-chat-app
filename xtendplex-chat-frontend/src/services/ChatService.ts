@@ -72,6 +72,16 @@ export interface GetMessagesOptions {
   after?: string; // timestamp or message ID
 }
 
+// Add new interfaces for attachments
+export interface AttachmentUploadResponse {
+  id: string;
+  url: string;
+  file_path: string;
+  file_type: string;
+  file_name: string;
+  file_size: number;
+}
+
 const ChatService = {
   // Get direct messages between current user and another user
   getDirectMessages: async (
@@ -98,6 +108,21 @@ const ChatService = {
 
   // Send message (to user or group)
   sendMessage: async (message: SendMessageRequest): Promise<Message> => {
+    // If there are files to upload, upload them first
+    if (message.attachments?.length) {
+      const uploadedFiles = await ChatService.uploadAttachments(
+        message.attachments as unknown as File[]
+      );
+
+      // Update the message with the uploaded file information
+      message.attachments = uploadedFiles.map((file) => ({
+        filePath: file.file_path,
+        fileType: file.file_type,
+        fileName: file.file_name,
+        fileSize: file.file_size,
+      }));
+    }
+
     return apiClient.post<Message>("/messages", message);
   },
 
@@ -156,6 +181,26 @@ const ChatService = {
     }
   ): Promise<Attachment> => {
     return apiClient.post<Attachment>(`/attachments/${messageId}`, file);
+  },
+
+  // Add new method for uploading attachments
+  uploadAttachments: async (
+    files: File[]
+  ): Promise<AttachmentUploadResponse[]> => {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append("files", file);
+    });
+
+    return apiClient.post<AttachmentUploadResponse[]>(
+      "/attachments/upload",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
   },
 };
 

@@ -56,6 +56,11 @@ const GroupService = {
     return apiClient.post<Group>("/groups", groupData);
   },
 
+  // Get public groups
+  getPublicGroups: async (): Promise<Group[]> => {
+    return apiClient.get<Group[]>("/groups");
+  },
+
   // Update group
   updateGroup: async (
     groupId: string,

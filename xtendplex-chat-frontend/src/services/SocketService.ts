@@ -25,8 +25,9 @@ class SocketService {
   public init(): void {
     if (this.socket) return;
 
-    // Get the API URL from environment or use default
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+    // Use the exact URL that worked in the HTML test page
+    const API_URL = "http://localhost:3000";
+    console.log("Using API URL for socket:", API_URL);
 
     // Get auth token - ensure we get the correct token format
     const token = localStorage.getItem("access_token");
@@ -34,21 +35,21 @@ class SocketService {
     if (!token) {
       console.warn("No access token found for socket connection");
     } else {
-      console.log("Initializing socket with token");
+      console.log("Initializing socket with token available");
     }
 
-    this.socket = io(API_URL, {
-      autoConnect: false,
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      auth: token ? { token } : undefined,
-      query: token ? { token } : undefined,
-      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+    try {
+      // Following EXACTLY the working HTML test page approach
+      this.socket = io(API_URL, {
+        autoConnect: false,
+        auth: { token },
+      });
 
-    this.setupEventListeners();
+      console.log("Socket.io instance created");
+      this.setupEventListeners();
+    } catch (error) {
+      console.error("Error initializing socket:", error);
+    }
   }
 
   // Setup socket event listeners
@@ -57,52 +58,81 @@ class SocketService {
 
     // Connection events
     this.socket.on("connect", () => {
-      console.log("Socket connected");
+      console.log("Socket connected successfully with ID:", this.socket?.id);
       this.reconnectionAttempts = 0;
+      this.trigger("connect", {});
     });
 
     this.socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
+      this.trigger("disconnect", reason);
+    });
+
+    this.socket.on("connect_error", (error) => {
+      console.error("Socket connect error:", error);
+      this.trigger("connect_error", error);
     });
 
     this.socket.on("error", (error) => {
       console.error("Socket error:", error);
+      this.trigger("error", error);
     });
 
     this.socket.on("reconnect_attempt", (attempt) => {
       console.log(`Reconnection attempt ${attempt}`);
       this.reconnectionAttempts = attempt;
-
-      if (this.reconnectionAttempts > this.maxReconnectionAttempts) {
-        this.socket?.disconnect();
-      }
+      this.trigger("reconnecting", {});
 
       // Update the token on reconnect attempt - in case it was refreshed
       if (this.socket) {
         const token = localStorage.getItem("access_token");
         if (token) {
           this.socket.auth = { token };
-          (this.socket.io.opts as any).query = { token };
         }
       }
     });
 
-    // Chat events
-    if (this.messageHandler) {
-      this.socket.on("message", this.messageHandler);
-    }
-    if (this.messageUpdateHandler) {
-      this.socket.on("message_update", this.messageUpdateHandler);
-    }
-    if (this.messageDeleteHandler) {
-      this.socket.on("message_delete", this.messageDeleteHandler);
-    }
-    if (this.reactionAddHandler) {
-      this.socket.on("reaction_added", this.reactionAddHandler);
-    }
-    if (this.reactionRemoveHandler) {
-      this.socket.on("reaction_removed", this.reactionRemoveHandler);
-    }
+    // Chat events - always set these up regardless of handlers
+    // This ensures events are captured even if handlers are registered later
+    this.socket.on("message", (message) => {
+      console.log("Socket received message event:", message);
+      if (this.messageHandler) {
+        this.messageHandler(message);
+      }
+      this.trigger("message", message);
+    });
+
+    this.socket.on("message_update", (message) => {
+      console.log("Socket received message_update event:", message);
+      if (this.messageUpdateHandler) {
+        this.messageUpdateHandler(message);
+      }
+      this.trigger("message_update", message);
+    });
+
+    this.socket.on("message_delete", (messageId) => {
+      console.log("Socket received message_delete event:", messageId);
+      if (this.messageDeleteHandler) {
+        this.messageDeleteHandler(messageId);
+      }
+      this.trigger("message_delete", messageId);
+    });
+
+    this.socket.on("reaction_added", (reaction) => {
+      console.log("Socket received reaction_added event:", reaction);
+      if (this.reactionAddHandler) {
+        this.reactionAddHandler(reaction);
+      }
+      this.trigger("reaction_added", reaction);
+    });
+
+    this.socket.on("reaction_removed", (data) => {
+      console.log("Socket received reaction_removed event:", data);
+      if (this.reactionRemoveHandler) {
+        this.reactionRemoveHandler(data);
+      }
+      this.trigger("reaction_removed", data);
+    });
 
     // Auth events
     this.socket.on("authenticated", (data) => {
@@ -151,8 +181,25 @@ class SocketService {
 
   // Connect to socket server
   public connect(): void {
-    if (!this.socket) this.init();
+    if (!this.socket) {
+      console.log("Socket not initialized, initializing before connecting");
+      this.init();
+    }
+
+    // Log token presence before connecting
+    const token = localStorage.getItem("access_token");
+    console.log("Connect method: token available:", !!token);
+
+    console.log("Attempting to connect socket");
     this.socket?.connect();
+
+    // Add small delay and check connection
+    setTimeout(() => {
+      console.log(
+        "Connection status after connect attempt:",
+        this.socket?.connected
+      );
+    }, 1000);
   }
 
   // Disconnect from socket server
@@ -179,71 +226,23 @@ class SocketService {
       fileSize: number;
     }>;
   }): void {
-    // Check connection state and token
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      console.error("No auth token available for socket connection");
-      this.trigger("error", {
-        message: "Authentication required to send messages",
-      });
-      return;
-    }
-
     if (!this.socket) {
-      console.error("Socket not initialized, initializing now");
-      this.init();
-      this.connect();
-
-      // Schedule message sending after connection
-      const retryTimeout = setTimeout(() => {
-        if (this.socket?.connected) {
-          console.log("Socket connected, sending delayed message");
-          this.socket.emit("send_message", messageData);
-          this.trigger("message_sent", { success: true });
-        } else {
-          console.error("Socket failed to connect after initialization");
-          this.trigger("error", {
-            message: "Failed to connect to chat server",
-          });
-        }
-        clearTimeout(retryTimeout);
-      }, 1500);
-
+      console.error("Socket not initialized, cannot send message");
+      this.trigger("error", { message: "Socket connection not initialized" });
       return;
     }
 
     if (!this.socket.connected) {
-      console.error("Socket not connected, attempting to reconnect", {
-        hasSocket: !!this.socket,
-        connected: this.socket?.connected,
-        authToken: !!token,
-      });
+      console.error("Socket not connected, cannot send message");
+      this.trigger("error", { message: "Not connected to chat server" });
 
-      // Reinitialize with fresh token
-      this.init();
-      this.connect();
-
-      // Emit an event for UI feedback
-      this.trigger("reconnecting", {});
-
-      // Attempt to send after reconnection
-      const retryTimeout = setTimeout(() => {
-        if (this.socket?.connected) {
-          console.log("Socket reconnected, sending delayed message");
-          this.socket.emit("send_message", messageData);
-          this.trigger("message_sent", { success: true });
-        } else {
-          console.error("Socket failed to reconnect", {
-            hasSocket: !!this.socket,
-            connected: this.socket?.connected,
-          });
-          this.trigger("error", {
-            message: "Failed to reconnect to chat server",
-          });
-        }
-        clearTimeout(retryTimeout);
-      }, 2000);
-
+      // Try to reconnect
+      const token = localStorage.getItem("access_token");
+      if (token) {
+        console.log("Attempting to reconnect before sending message...");
+        this.socket.auth = { token };
+        this.connect();
+      }
       return;
     }
 
@@ -263,8 +262,23 @@ class SocketService {
     groupId: string,
     reaction: string
   ): void {
-    if (!this.socket?.connected) return;
-    this.socket.emit("add_reaction", { messageId, groupId, reaction });
+    if (!this.socket?.connected) {
+      console.error("Socket not connected, cannot add reaction");
+      return;
+    }
+
+    console.log(
+      `Emitting add_reaction: ${reaction} to message ${messageId} in group ${groupId}`
+    );
+
+    // Follow the server-side route structure
+    this.socket.emit("add_reaction", {
+      messageId,
+      groupId,
+      reaction,
+      // The server needs to know which message to add the reaction to
+      message_id: messageId,
+    });
   }
 
   // Register an event listener
@@ -352,8 +366,10 @@ class SocketService {
   ) {
     this.reactionAddHandler = handler;
     if (this.socket) {
+      console.log("Registering reaction_added handler");
       this.socket.on("reaction_added", handler);
     }
+    return () => this.offReactionAdd(handler);
   }
 
   public offReactionAdd(
@@ -365,6 +381,7 @@ class SocketService {
     }) => void
   ) {
     if (this.socket && this.reactionAddHandler === handler) {
+      console.log("Removing reaction_added handler");
       this.socket.off("reaction_added", handler);
       this.reactionAddHandler = null;
     }
@@ -379,8 +396,10 @@ class SocketService {
   ) {
     this.reactionRemoveHandler = handler;
     if (this.socket) {
+      console.log("Registering reaction_removed handler");
       this.socket.on("reaction_removed", handler);
     }
+    return () => this.offReactionRemove(handler);
   }
 
   public offReactionRemove(
