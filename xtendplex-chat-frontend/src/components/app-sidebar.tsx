@@ -23,7 +23,7 @@ const data = {
   },
   teams: [
     {
-      name: "Acme Inc",
+      name: userFromStorage?.username || "Guest",
       logo: GalleryVerticalEnd,
       plan: "XtendPlex Chat",
     },
@@ -67,11 +67,11 @@ const data = {
       items: [
         {
           title: "Create",
-          url: "/new-group",
+          url: "/groups/add",
         },
         {
           title: "Manage",
-          url: "/manage-groups",
+          url: "/groups",
         },
       ],
     },

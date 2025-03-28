@@ -61,6 +61,22 @@ export function ChatHeader({ children, className }: ChatHeaderProps) {
             ></span>
             {isConnected ? "Connected" : "Offline"}
           </span>
+          {!isConnected && (
+            <button
+              onClick={() => {
+                // Reconnect with fresh token
+                const token = localStorage.getItem("access_token");
+                if (token) {
+                  SocketService.disconnect();
+                  SocketService.init();
+                  SocketService.connect();
+                }
+              }}
+              className="ml-2 px-2 py-0.5 text-xs bg-gray-100 hover:bg-gray-200 rounded"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     </div>
