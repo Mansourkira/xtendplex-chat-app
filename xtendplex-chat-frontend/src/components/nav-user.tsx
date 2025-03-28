@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, Bell, ChevronsUpDown, Circle, LogOut } from "lucide-react";
+import { BadgeCheck, ChevronsUpDown, Circle, LogOut } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -25,12 +25,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToaster } from "@/hooks/use-toaster";
 import AuthService, { UserStatus } from "@/services/AuthService";
 import { useState } from "react";
-
+import { useNavigate } from "react-router-dom";
 export function NavUser({
   user,
 }: {
   user: {
-    name: string;
+    username: string;
     email: string;
     avatar: string;
     status?: string;
@@ -39,18 +39,15 @@ export function NavUser({
   const { isMobile } = useSidebar();
   const { logout, user: authUser, setUser } = useAuth();
   const { success, error, info, warning } = useToaster();
+  const navigate = useNavigate();
   const [currentStatus, setCurrentStatus] = useState<UserStatus>(
     (authUser?.status as UserStatus) || "online"
   );
 
   const handleAccount = () => {
     // Handle account click
+    navigate("/profile");
     console.log("Account clicked");
-  };
-
-  const handleNotifications = () => {
-    // Handle notifications click
-    console.log("Notifications clicked");
   };
 
   const handleLogout = async () => {
@@ -107,7 +104,7 @@ export function NavUser({
             >
               <div className="relative">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                  <AvatarImage src={user.avatar} alt={user.username} />
                   <AvatarFallback className="rounded-lg">CN</AvatarFallback>
                 </Avatar>
                 <Circle
@@ -117,7 +114,7 @@ export function NavUser({
                 />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name}</span>
+                <span className="truncate font-medium">{user.username}</span>
                 <span className="truncate text-xs">{user.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
@@ -133,7 +130,7 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <div className="relative">
                   <Avatar className="h-8 w-8 rounded-lg">
-                    <AvatarImage src={user.avatar} alt={user.name} />
+                    <AvatarImage src={user.avatar} alt={user.username} />
                     <AvatarFallback className="rounded-lg">CN</AvatarFallback>
                   </Avatar>
                   <Circle
@@ -143,7 +140,7 @@ export function NavUser({
                   />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name}</span>
+                  <span className="truncate font-medium">{user.username}</span>
                   <span className="truncate text-xs">{user.email}</span>
                 </div>
               </div>
@@ -179,10 +176,6 @@ export function NavUser({
               <DropdownMenuItem onClick={handleAccount}>
                 <BadgeCheck className="mr-2 h-4 w-4" />
                 Account
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleNotifications}>
-                <Bell className="mr-2 h-4 w-4" />
-                Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
