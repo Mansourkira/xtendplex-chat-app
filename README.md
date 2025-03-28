@@ -44,8 +44,9 @@ npm install
      - PORT=3000
      - FRONTEND_URL=http://localhost:5173
      - JWT_SECRET=your_secret_key
-     - SUPABASE_URL=your_supabase_url
-     - SUPABASE_KEY=your_supabase_key
+     - SUPABASE_URL=your_supabase_url (create your own Supabase project at supabase.com)
+     - SUPABASE_KEY=your_supabase_key (get this from your Supabase project settings)
+       Note: For Supabase setup, create a new project at supabase.com and follow the SQL files in this repo to set up the required policies and functions.
 
 ### Frontend Setup
 
