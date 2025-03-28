@@ -37,6 +37,11 @@ router.post("/register", async (req, res) => {
     const { data: authUser, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          username,
+        },
+      },
     });
 
     if (authError) {
@@ -61,8 +66,8 @@ router.post("/register", async (req, res) => {
         id: authUser.user.id,
         username,
         email,
-        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${username}`,
-        status: "offline",
+        avatar: `/avatars/default-avatar.png`,
+        status: "online",
         password: password,
         role: userRole,
         created_at: new Date().toISOString(),
@@ -86,7 +91,7 @@ router.post("/register", async (req, res) => {
         id: authUser.user.id,
         username,
         email,
-        status: "offline",
+        status: "online",
         role: userRole,
       },
       session: session
@@ -337,6 +342,8 @@ router.post("/refresh", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+//
 
 // Logout user
 router.post("/logout", async (req, res) => {
