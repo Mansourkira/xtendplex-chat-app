@@ -1,5 +1,6 @@
 import {
   Navigate,
+  Outlet,
   Route,
   BrowserRouter as Router,
   Routes,
@@ -19,7 +20,10 @@ import AddUserPage from "./pages/users/add";
 
 // Import ChatComponent
 import { ChatComponent } from "./components/chat-component";
-
+import GroupManagementPage from "./pages/groups";
+import AddGroupPage from "./pages/groups/add";
+import ProfilePage from "./pages/profile";
+import EditUserPage from "./pages/users/edit";
 function App() {
   return (
     <Router>
@@ -34,15 +38,16 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <DashboardPage>
+                  <Outlet />
+                </DashboardPage>
               </ProtectedRoute>
             }
           >
             {/* Nested routes inside dashboard */}
             <Route path="users" element={<UserManagementPage />} />
             <Route path="users/add" element={<AddUserPage />} />
-            <Route path="users/edit/:id" element={<AddUserPage />} />
-            <Route path="users/:id" element={<UserManagementPage />} />
+            <Route path="users/edit/:id" element={<EditUserPage />} />
 
             {/* Chat routes */}
             <Route path="chat" element={<ChatComponent />} />
@@ -53,8 +58,14 @@ function App() {
               element={<div className="h-full">Chat Settings</div>}
             />
 
-            {/* Default route */}
-            <Route index element={<Navigate to="/users" replace />} />
+            {/* Group routes */}
+            <Route path="groups" element={<GroupManagementPage />} />
+            <Route path="groups/add" element={<AddGroupPage />} />
+            <Route path="groups/edit/:id" element={<AddGroupPage />} />
+            <Route path="groups/:id" element={<GroupManagementPage />} />
+
+            {/* Profile route */}
+            <Route path="profile" element={<ProfilePage />} />
           </Route>
 
           {/* Redirect any unknown routes to home */}
