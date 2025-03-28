@@ -63,7 +63,7 @@ export function NavUser({
 
   const handleStatusChange = async (status: UserStatus) => {
     try {
-      await AuthService.updateStatus(status);
+      const response = await AuthService.updateStatus(status);
       setCurrentStatus(status);
 
       // Update user object in auth context
@@ -75,9 +75,14 @@ export function NavUser({
       }
 
       success(`Your status is now ${status}`);
-    } catch (error: any) {
-      console.error("Error updating status:", error);
-      error("Failed to update your status. Please try again.");
+    } catch (err) {
+      console.error("Error updating status:", err);
+      // Use error toast instead of calling error as a function
+      error(
+        `Failed to update your status: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`
+      );
     }
   };
 

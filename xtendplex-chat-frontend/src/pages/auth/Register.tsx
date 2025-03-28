@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToaster } from "@/hooks/use-toaster";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../contexts/AuthContext";
 
 const Register = () => {
   const [username, setUsername] = useState("");
@@ -25,51 +26,49 @@ const Register = () => {
   const [success, setSuccess] = useState("");
 
   const { register, login } = useAuth();
+  const { error: toasterError, success: toasterSuccess } = useToaster();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setIsSubmitting(true);
+
+    const formData = new FormData(e.currentTarget);
+    const username = formData.get("username") as string;
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
 
     // Validation
+    console.log(username, email, password, confirmPassword);
     if (!username || !email || !password || !confirmPassword) {
       setError("All fields are required");
+      setIsSubmitting(false);
       return;
     }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      setIsSubmitting(false);
       return;
     }
 
     if (password.length < 6) {
       setError("Password must be at least 6 characters long");
+      setIsSubmitting(false);
       return;
     }
 
-    setIsSubmitting(true);
-
     try {
-      // Default role is 'user', status will default to 'offline' in the database
+      // Register with initial status as online
       await register(username, email, password);
-      setSuccess("Registration successful! Logging you in...");
-
-      // After successful registration, log the user in automatically
-      try {
-        await login(email, password);
-        // Give a slight delay for the success message to be seen
-        setTimeout(() => {
-          navigate("/");
-        }, 1500);
-      } catch (loginError) {
-        // If login fails after registration, redirect to login page
-        setTimeout(() => {
-          navigate("/login");
-        }, 1500);
-      }
-    } catch (error) {
-      // Using a generic error message to avoid typing issues
+      // Login automatically after registration
+      await login(email, password);
+      toasterSuccess("Successfully registered and logged in!");
+      navigate("/chat");
+    } catch (err) {
+      console.error("Registration error:", err);
       setError("Registration failed. Please try again.");
     } finally {
       setIsSubmitting(false);
