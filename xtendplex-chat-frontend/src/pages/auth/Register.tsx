@@ -35,13 +35,7 @@ const Register = () => {
     setSuccess("");
     setIsSubmitting(true);
 
-    const formData = new FormData(e.currentTarget);
-    const username = formData.get("username") as string;
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-
     // Validation
-    console.log(username, email, password, confirmPassword);
     if (!username || !email || !password || !confirmPassword) {
       setError("All fields are required");
       setIsSubmitting(false);
