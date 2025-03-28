@@ -58,10 +58,8 @@ cd ../xtendplex-chat-frontend
 
 2. Install dependencies:
 
-```bash
+````bash
 npm install
-```
-
 3. Configure environment variables:
    - Rename `.env.example` to `.env` if it exists or create a new `.env` file
    - Required environment variables:
@@ -69,36 +67,16 @@ npm install
 
 ## Running the Application
 
+### Quick Test with Local Database
+
+For quick testing with your own database:
+
+1. Create a new Supabase project at supabase.com
+2. Copy the SQL files from `database/` directory and run them in your Supabase SQL editor
+3. Update your `.env` file with your Supabase credentials
+4. Start the servers as described below
+
 ### Start the Backend Server
-
-```bash
-cd xtendplex-chat-backend
-npm run dev
-```
-
-The backend server will start on http://localhost:3000.
-
-### Start the Frontend Application
-
-```bash
-cd xtendplex-chat-frontend
-npm run dev
-```
-
-The frontend application will start on http://localhost:5173.
-
-## Usage
-
-1. Open your browser and navigate to http://localhost:5173
-2. Register a new account or login with existing credentials
-3. Start chatting!
-
-## Features
-
-- Real-time messaging using Socket.io
-- User authentication and authorization
-- Clean, responsive UI built with Tailwind CSS
-- TypeScript for type safety
 
 ## Tech Stack
 
@@ -128,7 +106,7 @@ The frontend application will start on http://localhost:5173.
 npm run dev     # Start development server
 npm run build   # Build for production
 npm run preview # Preview production build locally
-```
+````
 
 ### Backend Development Commands
 
