@@ -1,6 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const supabase = require("../utils/supabase");
+const cors = require("cors");
+
+// Apply CORS specifically for auth routes
+router.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    credentials: true,
+  })
+);
 
 // Register new user
 router.post("/register", async (req, res) => {
@@ -14,7 +25,7 @@ router.post("/register", async (req, res) => {
   const userRole = "admin";
 
   try {
-    console.log("Register request received:", { username, email });
+    console.log("Register request received:", { username, email, password });
 
     // Check if email is valid (simple validation)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -26,14 +37,11 @@ router.post("/register", async (req, res) => {
     const { data: authUser, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { username, role: userRole },
-        emailRedirectTo: `${process.env.CLIENT_URL}/auth/callback`,
-      },
     });
 
     if (authError) {
       console.error("Auth error:", authError);
+      console.error("Auth error details:", JSON.stringify(authError, null, 2));
       return res.status(400).json({ message: authError.message });
     }
 
@@ -53,9 +61,11 @@ router.post("/register", async (req, res) => {
         id: authUser.user.id,
         username,
         email,
-        created_at: new Date().toISOString(),
+        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${username}`,
         status: "offline",
+        password: password,
         role: userRole,
+        created_at: new Date().toISOString(),
       });
 
       if (dbError) {
@@ -104,12 +114,44 @@ router.post("/login", async (req, res) => {
   try {
     console.log("Login attempt:", email);
 
-    // Sign in with Supabase Auth
-    const { data: authData, error: authError } =
-      await supabase.auth.signInWithPassword({
+    // Check if input is an email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isEmail = emailRegex.test(email);
+
+    let authData;
+    let authError;
+
+    if (isEmail) {
+      // Sign in with email
+      const result = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+      authData = result.data;
+      authError = result.error;
+    } else {
+      // First get user by username
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("email")
+        .eq("username", email)
+        .single();
+
+      console.log("User data:", userData);
+      console.log("user error ", userError);
+      console.log("user data email", userData.email);
+      if (userError || !userData) {
+        return res.status(400).json({ message: "Invalid credentials" });
+      }
+
+      // Then sign in with email
+      const result = await supabase.auth.signInWithPassword({
+        email: userData.email,
+        password,
+      });
+      authData = result.data;
+      authError = result.error;
+    }
 
     if (authError) {
       console.error("Login error:", authError);
@@ -260,6 +302,15 @@ router.post("/refresh", async (req, res) => {
 
     if (error) {
       console.error("Token refresh error:", error);
+
+      // Check for rate limiting errors
+      if (error.status === 429 || error.message?.includes("rate limit")) {
+        return res.status(429).json({
+          message: "Too many refresh attempts, please try again later",
+          code: "rate_limit_exceeded",
+        });
+      }
+
       return res
         .status(401)
         .json({ message: "Invalid or expired refresh token" });
@@ -274,6 +325,15 @@ router.post("/refresh", async (req, res) => {
     });
   } catch (error) {
     console.error("Refresh token error:", error);
+
+    // Return appropriate status code for different errors
+    if (error.status === 429 || error.message?.includes("rate limit")) {
+      return res.status(429).json({
+        message: "Too many refresh attempts, please try again later",
+        code: "rate_limit_exceeded",
+      });
+    }
+
     res.status(500).json({ message: "Server error" });
   }
 });

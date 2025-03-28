@@ -60,7 +60,11 @@ router.get("/group/:groupId", verifyToken, async (req, res) => {
         is_edited,
         created_at,
         updated_at,
-        users (id, username, avatar)
+        user:user_id (
+          id,
+          username,
+          avatar
+        )
       `
       )
       .eq("group_id", req.params.groupId)
@@ -95,7 +99,11 @@ router.get("/group/:groupId", verifyToken, async (req, res) => {
         message_id,
         user_id,
         created_at,
-        users (id, username, avatar)
+        user:user_id (
+          id,
+          username,
+          avatar
+        )
       `
       )
       .in("message_id", messageIds);
@@ -115,7 +123,7 @@ router.get("/group/:groupId", verifyToken, async (req, res) => {
           .map((reaction) => ({
             id: reaction.id,
             reaction: reaction.reaction,
-            user: reaction.users,
+            user: reaction.user,
           })) || [];
 
       return {
@@ -126,7 +134,7 @@ router.get("/group/:groupId", verifyToken, async (req, res) => {
         is_edited: message.is_edited,
         created_at: message.created_at,
         updated_at: message.updated_at,
-        user: message.users,
+        user: message.user,
         message_attachments: messageAttachments,
         reactions: messageReactions,
       };
@@ -193,6 +201,8 @@ router.get("/direct/:userId", verifyToken, async (req, res) => {
           name: "Direct Message",
           is_direct_message: true,
           created_by: currentUserId,
+          created_at: new Date(),
+          updated_at: new Date(),
         })
         .select()
         .single();
@@ -202,10 +212,16 @@ router.get("/direct/:userId", verifyToken, async (req, res) => {
       }
 
       // Add both users to the group
-      await supabase.from("group_members").insert([
-        { group_id: newGroup.id, user_id: currentUserId, role: "member" },
-        { group_id: newGroup.id, user_id: targetUserId, role: "member" },
-      ]);
+      const { error: membersError } = await supabase
+        .from("group_members")
+        .insert([
+          { group_id: newGroup.id, user_id: currentUserId, role: "member" },
+          { group_id: newGroup.id, user_id: targetUserId, role: "member" },
+        ]);
+
+      if (membersError) {
+        return res.status(500).json({ message: membersError.message });
+      }
 
       groupId = newGroup.id;
     }
@@ -222,7 +238,11 @@ router.get("/direct/:userId", verifyToken, async (req, res) => {
         is_edited,
         created_at,
         updated_at,
-        users (id, username, avatar)
+        user:user_id (
+          id,
+          username,
+          avatar
+        )
       `
       )
       .eq("group_id", groupId)
@@ -249,7 +269,11 @@ router.get("/direct/:userId", verifyToken, async (req, res) => {
         message_id,
         user_id,
         created_at,
-        users (id, username, avatar)
+        user:user_id (
+          id,
+          username,
+          avatar
+        )
       `
       )
       .in("message_id", messageIds);
@@ -269,7 +293,7 @@ router.get("/direct/:userId", verifyToken, async (req, res) => {
           .map((reaction) => ({
             id: reaction.id,
             reaction: reaction.reaction,
-            user: reaction.users,
+            user: reaction.user,
           })) || [];
 
       return {
@@ -280,7 +304,7 @@ router.get("/direct/:userId", verifyToken, async (req, res) => {
         is_edited: message.is_edited,
         created_at: message.created_at,
         updated_at: message.updated_at,
-        user: message.users,
+        user: message.user,
         message_attachments: messageAttachments,
         reactions: messageReactions,
       };
@@ -374,8 +398,25 @@ router.post("/", verifyToken, async (req, res) => {
         user_id: req.user.id,
         parent_id: parent_id || null,
         created_at: new Date(),
+        updated_at: new Date(),
       })
-      .select()
+      .select(
+        `
+        id,
+        content,
+        user_id,
+        group_id,
+        parent_id,
+        is_edited,
+        created_at,
+        updated_at,
+        user:user_id (
+          id,
+          username,
+          avatar
+        )
+      `
+      )
       .single();
 
     if (messageError) {
@@ -388,21 +429,7 @@ router.post("/", verifyToken, async (req, res) => {
       .update({ updated_at: new Date() })
       .eq("id", group_id);
 
-    // Get user details to return with message
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .select("id, username")
-      .eq("id", req.user.id)
-      .single();
-
-    if (userError) {
-      return res.status(500).json({ message: userError.message });
-    }
-
-    res.status(201).json({
-      ...message,
-      user,
-    });
+    res.status(201).json(message);
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Server error" });

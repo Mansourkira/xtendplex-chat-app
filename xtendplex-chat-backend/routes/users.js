@@ -3,6 +3,32 @@ const router = express.Router();
 const { verifyToken } = require("../middleware/auth");
 const supabase = require("../utils/supabase");
 
+// Get all users for chat (except current user)
+router.get("/chat-users", verifyToken, async (req, res) => {
+  try {
+    const { data: users, error } = await supabase
+      .from("users")
+      .select("id, username, avatar, status")
+      .neq("id", req.user.id)
+      .order("username");
+
+    if (error) {
+      return res.status(500).json({ message: error.message });
+    }
+
+    // Add default avatar for users who don't have one
+    const usersWithDefaultAvatar = users.map((user) => ({
+      ...user,
+      avatar: user.avatar || `/avatars/default-${user.id.slice(0, 2)}.svg`,
+    }));
+
+    res.json(usersWithDefaultAvatar);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Get all users
 router.get("/", verifyToken, async (req, res) => {
   try {
@@ -166,26 +192,6 @@ router.get("/search/:query", verifyToken, async (req, res) => {
       .from("users")
       .select("id, username, email")
       .ilike("username", `%${req.params.query}%`)
-      .order("username");
-
-    if (error) {
-      return res.status(500).json({ message: error.message });
-    }
-
-    res.json(users);
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Get all users for chat (except current user)
-router.get("/chat-users", verifyToken, async (req, res) => {
-  try {
-    const { data: users, error } = await supabase
-      .from("users")
-      .select("id, username, avatar, status")
-      .neq("id", req.user.id)
       .order("username");
 
     if (error) {
