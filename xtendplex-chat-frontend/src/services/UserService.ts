@@ -5,7 +5,8 @@ export interface User {
   id: string;
   username: string;
   email: string;
-  status?: string;
+  status?: "online" | "offline" | "away" | "busy";
+  password?: string;
   role?: string;
   avatar?: string;
   created_at?: string;
@@ -17,6 +18,16 @@ export interface UpdateUserRequest {
   email?: string;
   avatar?: string;
   status?: UserStatus;
+  role?: string;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  email: string;
+  password: string;
+  avatar: string;
+  status: UserStatus;
+  role: string;
 }
 
 const UserService = {
@@ -45,6 +56,17 @@ const UserService = {
     return apiClient.put<User>(`/users/${userId}`, userData);
   },
 
+  // update current user
+  updateCurrentUser: async (userData: UpdateUserRequest): Promise<User> => {
+    localStorage.setItem("user", JSON.stringify(userData));
+    return apiClient.put<User>("/users/current", userData);
+  },
+
+  // Delete user
+  deleteUser: async (userId: string): Promise<void> => {
+    return apiClient.delete(`/users/${userId}`);
+  },
+
   // Update user status
   updateStatus: async (
     status: UserStatus
@@ -62,6 +84,11 @@ const UserService = {
   // Get all users for chat (excluding current user)
   getChatUsers: async (): Promise<User[]> => {
     return apiClient.get<User[]>("/users/chat-users");
+  },
+
+  // Create a new user
+  createUser: async (userData: CreateUserRequest): Promise<User> => {
+    return apiClient.post<User>("/users/create", userData);
   },
 };
 
