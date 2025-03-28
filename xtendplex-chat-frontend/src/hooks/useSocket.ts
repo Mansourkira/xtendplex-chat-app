@@ -62,7 +62,26 @@ export const useSocket = (groupId?: string) => {
     }
 
     if (!isConnected) {
-      console.error("Socket not connected, cannot send message");
+      console.error("Socket not connected, cannot send message", {
+        socketStatus: SocketService.isConnected()
+          ? "connected (service)"
+          : "disconnected (service)",
+        hookStatus: isConnected ? "connected (hook)" : "disconnected (hook)",
+      });
+
+      // Try to reconnect
+      SocketService.connect();
+      setTimeout(() => {
+        if (SocketService.isConnected()) {
+          console.log("Socket reconnected, sending message");
+          SocketService.sendMessage({
+            content,
+            groupId,
+            parentId,
+            attachments,
+          });
+        }
+      }, 1000);
       return;
     }
 

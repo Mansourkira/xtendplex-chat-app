@@ -108,6 +108,16 @@ io.on("connection", (socket) => {
   // Join user's personal room
   socket.join(`user:${socket.user.uid}`);
 
+  // Simple ping/pong for connection testing
+  socket.on("ping", (data) => {
+    console.log("Ping received from client:", socket.user.uid);
+    socket.emit("pong", {
+      message: "Server pong response",
+      userId: socket.user.uid,
+      timestamp: new Date().toISOString(),
+      receivedData: data,
+  });
+
   // Handle join group
   socket.on("join_group", async (groupId) => {
     try {
@@ -498,6 +508,11 @@ app.use("/api", routes);
 // Default route
 app.get("/", (req, res) => {
   res.send("Xtendplex Chat API is running");
+});
+
+// Socket test endpoint
+app.get("/socket-test", (req, res) => {
+  res.sendFile(__dirname + "/socket-test.html");
 });
 
 // Start server

@@ -28,8 +28,14 @@ class SocketService {
     // Get the API URL from environment or use default
     const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-    // Get auth token
+    // Get auth token - ensure we get the correct token format
     const token = localStorage.getItem("access_token");
+
+    if (!token) {
+      console.warn("No access token found for socket connection");
+    } else {
+      console.log("Initializing socket with token");
+    }
 
     this.socket = io(API_URL, {
       autoConnect: false,
@@ -37,8 +43,9 @@ class SocketService {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
-      auth: { token },
-      query: { token }, // Include token in query for compatibility with some servers
+      auth: token ? { token } : undefined,
+      query: token ? { token } : undefined,
+      extraHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
     this.setupEventListeners();
@@ -172,51 +179,75 @@ class SocketService {
       fileSize: number;
     }>;
   }): void {
+    // Check connection state and token
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      console.error("No auth token available for socket connection");
+      this.trigger("error", {
+        message: "Authentication required to send messages",
+      });
+      return;
+    }
+
     if (!this.socket) {
       console.error("Socket not initialized, initializing now");
       this.init();
       this.connect();
 
       // Schedule message sending after connection
-      setTimeout(() => {
+      const retryTimeout = setTimeout(() => {
         if (this.socket?.connected) {
           console.log("Socket connected, sending delayed message");
           this.socket.emit("send_message", messageData);
+          this.trigger("message_sent", { success: true });
         } else {
           console.error("Socket failed to connect after initialization");
           this.trigger("error", {
             message: "Failed to connect to chat server",
           });
         }
-      }, 1000);
+        clearTimeout(retryTimeout);
+      }, 1500);
 
       return;
     }
 
     if (!this.socket.connected) {
-      console.error("Socket not connected, attempting to reconnect");
+      console.error("Socket not connected, attempting to reconnect", {
+        hasSocket: !!this.socket,
+        connected: this.socket?.connected,
+        authToken: !!token,
+      });
+
+      // Reinitialize with fresh token
+      this.init();
       this.connect();
 
       // Emit an event for UI feedback
       this.trigger("reconnecting", {});
 
       // Attempt to send after reconnection
-      setTimeout(() => {
+      const retryTimeout = setTimeout(() => {
         if (this.socket?.connected) {
           console.log("Socket reconnected, sending delayed message");
           this.socket.emit("send_message", messageData);
+          this.trigger("message_sent", { success: true });
         } else {
-          console.error("Socket failed to reconnect");
+          console.error("Socket failed to reconnect", {
+            hasSocket: !!this.socket,
+            connected: this.socket?.connected,
+          });
           this.trigger("error", {
             message: "Failed to reconnect to chat server",
           });
         }
-      }, 1000);
+        clearTimeout(retryTimeout);
+      }, 2000);
 
       return;
     }
 
-    console.log("Sending message to group:", messageData.groupId, messageData);
+    console.log("Sending message to group:", messageData.groupId);
     this.socket.emit("send_message", messageData);
   }
 
