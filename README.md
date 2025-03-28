@@ -64,17 +64,10 @@ npm install
    - Rename `.env.example` to `.env` if it exists or create a new `.env` file
    - Required environment variables:
      - VITE_API_URL=http://localhost:3000/api
+     - VITE_SUPABASE_URL=your_supabase_url
+     - VITE_SUPABASE_KEY=your_supabase_key
 
 ## Running the Application
-
-### Quick Test with Local Database
-
-For quick testing with your own database:
-
-1. Create a new Supabase project at supabase.com
-2. Copy the SQL files from `database/` directory and run them in your Supabase SQL editor
-3. Update your `.env` file with your Supabase credentials
-4. Start the servers as described below
 
 ### Start the Backend Server
 
