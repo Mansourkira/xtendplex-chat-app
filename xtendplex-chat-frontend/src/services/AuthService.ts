@@ -1,4 +1,5 @@
 import apiClient from "./ApiClient";
+import socketService from "./SocketService";
 
 // Types
 export interface LoginCredentials {
@@ -59,6 +60,11 @@ const AuthService = {
       localStorage.setItem("access_token", response.session.access_token);
       localStorage.setItem("refresh_token", response.session.refresh_token);
       localStorage.setItem("user", JSON.stringify(response.user));
+
+      // Reinitialize socket with new token
+      socketService.disconnect();
+      socketService.init();
+      socketService.connect();
     }
 
     return response;
@@ -81,6 +87,11 @@ const AuthService = {
     } catch (_error) {
       return null;
     }
+  },
+
+  // update user
+  updateUser: async (user: User): Promise<User> => {
+    return await apiClient.put<User>("/auth/me", user);
   },
 
   isAuthenticated: (): boolean => {
