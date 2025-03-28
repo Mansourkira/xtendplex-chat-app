@@ -31,12 +31,9 @@ export function ChatComponent() {
   const { user } = useAuth();
   const params = useParams();
   const { id } = params;
-  console.log("id", id);
-  console.log("params", params);
   // Don't set a default chatId if none is provided
   const chatId = id;
   const chatType = params["*"]?.includes("group") ? "group" : "individual";
-  console.log("chatType", chatType);
   const [authRequired, setAuthRequired] = useState<boolean>(false);
   const [socketStatus, setSocketStatus] = useState<
     "connected" | "disconnected" | "reconnecting"
@@ -56,13 +53,11 @@ export function ChatComponent() {
       if (chatType === "individual") {
         try {
           const userData = await UserService.getUserById(chatId);
-          console.log("userData", userData);
           setChatPartner({
             username: userData.username,
             avatar: userData.avatar,
             status: userData.status,
           });
-          console.log("chatPartner", chatPartner);
         } catch (error) {
           console.error("Error fetching chat partner details:", error);
           setChatPartner({ username: "Unknown User" });
