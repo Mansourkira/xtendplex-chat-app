@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 export function LoginForm({
   className,
@@ -40,8 +41,9 @@ export function LoginForm({
 
     try {
       await login(email, password);
-      navigate("/"); // Redirect to home page on success
+      navigate("/chat"); // Redirect to home page on success
     } catch (err) {
+      toast.error("Invalid email or password. Please try again.");
       setError("Invalid email or password. Please try again.");
     } finally {
       setIsSubmitting(false);
@@ -59,9 +61,11 @@ export function LoginForm({
         </CardHeader>
         <CardContent>
           {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+            <Alert variant="destructive" className="mb-6 text-red-500">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <AlertDescription className="text-red-500">
+                {error}
+              </AlertDescription>
             </Alert>
           )}
           <form onSubmit={handleSubmit}>

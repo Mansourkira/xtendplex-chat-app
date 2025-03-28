@@ -131,14 +131,18 @@ type Toast = Omit<ToasterToast, "id">;
 function toast({ ...props }: Toast) {
   const id = generateId();
 
+  // update toast
   const update = (props: ToasterToast) =>
     dispatch({
       type: actionTypes.UPDATE_TOAST,
       toast: { ...props, id },
     });
+
+  // dismiss toast
   const dismiss = () =>
     dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id });
 
+  // add toast
   dispatch({
     type: actionTypes.ADD_TOAST,
     toast: {

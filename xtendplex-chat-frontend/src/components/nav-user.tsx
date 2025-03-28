@@ -43,6 +43,7 @@ export function NavUser({
   const [currentStatus, setCurrentStatus] = useState<UserStatus>(
     (authUser?.status as UserStatus) || "online"
   );
+  console.log("Current status:", currentStatus);
 
   const handleAccount = () => {
     // Handle account click
