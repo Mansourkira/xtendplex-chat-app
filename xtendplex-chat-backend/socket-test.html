@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Socket.io Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      #status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+        text-align: center;
+      }
+      .connected {
+        background-color: #dff0d8;
+        color: #3c763d;
+      }
+      .disconnected {
+        background-color: #f2dede;
+        color: #a94442;
+      }
+      .connecting {
+        background-color: #fcf8e3;
+        color: #8a6d3b;
+      }
+      button {
+        padding: 8px 16px;
+        margin: 5px;
+        cursor: pointer;
+      }
+      #log {
+        height: 300px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-top: 20px;
+        background-color: #f9f9f9;
+      }
+      .log-entry {
+        margin-bottom: 5px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Socket.io Connection Test</h1>
+    <div id="status" class="connecting">Connecting to Socket.io server...</div>
+
+    <div>
+      <input
+        type="text"
+        id="token"
+        placeholder="Enter your JWT token"
+        style="width: 70%; padding: 8px"
+      />
+      <button id="connect">Connect</button>
+      <button id="disconnect">Disconnect</button>
+    </div>
+
+    <div>
+      <h3>Test Events</h3>
+      <button id="test-ping">Test Ping</button>
+    </div>
+
+    <div id="log">
+      <div class="log-entry">Log messages will appear here...</div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script>
+      const statusElem = document.getElementById("status");
+      const logElem = document.getElementById("log");
+      const tokenInput = document.getElementById("token");
+      const connectBtn = document.getElementById("connect");
+      const disconnectBtn = document.getElementById("disconnect");
+      const testPingBtn = document.getElementById("test-ping");
+
+      let socket = null;
+
+      function updateStatus(connected) {
+        if (connected === true) {
+          statusElem.className = "connected";
+          statusElem.textContent = "Connected to Socket.io server";
+        } else if (connected === false) {
+          statusElem.className = "disconnected";
+          statusElem.textContent = "Disconnected from Socket.io server";
+        } else {
+          statusElem.className = "connecting";
+          statusElem.textContent = "Connecting to Socket.io server...";
+        }
+      }
+
+      function log(message) {
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+        logElem.appendChild(entry);
+        logElem.scrollTop = logElem.scrollHeight;
+      }
+
+      connectBtn.addEventListener("click", () => {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          log("Please enter a valid JWT token");
+          return;
+        }
+
+        if (socket) {
+          socket.disconnect();
+        }
+
+        updateStatus(null);
+        log("Attempting to connect with provided token...");
+
+        // Connect to the socket server with auth token
+        socket = io("http://localhost:3000", {
+          auth: { token },
+        });
+
+        // Connection events
+        socket.on("connect", () => {
+          updateStatus(true);
+          log("Socket connected successfully!");
+        });
+
+        socket.on("connect_error", (error) => {
+          updateStatus(false);
+          log(`Connection error: ${error.message}`);
+        });
+
+        socket.on("disconnect", (reason) => {
+          updateStatus(false);
+          log(`Disconnected: ${reason}`);
+        });
+
+        // Listen for common events
+        socket.on("message", (data) => {
+          log(`Received message: ${JSON.stringify(data)}`);
+        });
+
+        socket.on("pong", (data) => {
+          log(`Received pong: ${JSON.stringify(data)}`);
+        });
+
+        socket.on("error", (data) => {
+          log(`Received error: ${JSON.stringify(data)}`);
+        });
+
+        socket.on("user_typing", (data) => {
+          log(`User typing: ${JSON.stringify(data)}`);
+        });
+      });
+
+      disconnectBtn.addEventListener("click", () => {
+        if (socket) {
+          socket.disconnect();
+          socket = null;
+          updateStatus(false);
+          log("Manually disconnected");
+        }
+      });
+
+      testPingBtn.addEventListener("click", () => {
+        if (socket && socket.connected) {
+          log("Sending ping to server...");
+          socket.emit("ping", {
+            clientTimestamp: new Date().toISOString(),
+            testData: "Hello from client!",
+          });
+        } else {
+          log("Socket not connected");
+        }
+      });
+
+      // Initial state
+      updateStatus(false);
+    </script>
+  </body>
+</html>
