@@ -5,6 +5,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import AuthService, { User } from "../services/AuthService";
 
 interface AuthContextType {
@@ -21,6 +22,8 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   setUser: (user: User) => void;
+  updateUser: (user: User) => void;
+  updateCurrentUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,6 +45,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -49,6 +53,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       try {
         // Check if user is in localStorage
         const storedUser = localStorage.getItem("user");
+
         if (storedUser) {
           setUser(JSON.parse(storedUser));
           setIsAuthenticated(true);
@@ -61,6 +66,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               setIsAuthenticated(true);
               localStorage.setItem("user", JSON.stringify(userData));
             }
+          } else {
+            // No token found, redirect to login page
+            navigate("/login");
           }
         }
       } catch (err) {
@@ -71,7 +79,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
 
     initAuth();
-  }, []);
+  }, [navigate]);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
@@ -121,6 +129,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setIsAuthenticated(false);
   };
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+  };
+
+  const updateCurrentUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+  };
+
   const value = {
     user,
     loading,
@@ -130,6 +148,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     logout,
     isAuthenticated,
     setUser,
+    updateUser,
+    updateCurrentUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
