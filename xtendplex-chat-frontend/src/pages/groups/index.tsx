@@ -301,6 +301,19 @@ const GroupManagementPage = () => {
               <TableBody>
                 {filteredGroups.map((group) => (
                   <TableRow key={group.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={group.avatar} alt={group.name} />
+                          <AvatarFallback>
+                            {group.name?.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">{group.name}</div>
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell className="font-medium">{group.name}</TableCell>
                     <TableCell>{group.description || "-"}</TableCell>
                     <TableCell>
