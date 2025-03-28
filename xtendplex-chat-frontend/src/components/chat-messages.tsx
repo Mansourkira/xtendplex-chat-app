@@ -3,6 +3,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToaster } from "@/hooks/use-toaster";
 import { useSocket } from "@/hooks/useSocket";
 import { cn } from "@/lib/utils";
 import { ChatService } from "@/services";
@@ -17,34 +18,46 @@ interface ChatMessagesProps {
 
 export function ChatMessages({ chatId, type }: ChatMessagesProps) {
   const { user } = useAuth();
+  const { success } = useToaster();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<{ [userId: string]: string }>(
     {}
   );
+  const [isTabActive, setIsTabActive] = useState(true);
+  const [actualGroupId, setActualGroupId] = useState<string | null>(null);
 
-  const getFileIcon = (fileType: string) => {
-    if (fileType.startsWith("image/")) return "📷";
-    if (fileType.startsWith("video/")) return "🎥";
-    if (fileType.startsWith("audio/")) return "🎵";
-    return "📄";
-  };
-
+  // All refs
+  const notificationSound = useRef(new Audio("/notification.mp3"));
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<{ [userId: string]: NodeJS.Timeout }>({});
   const lastMessageRef = useRef<string | null>(null);
 
-  // Convert chat type and ID to a group ID for socket communication
-  const [actualGroupId, setActualGroupId] = useState<string | null>(null);
-
   // Initialize socket with actualGroupId when it's available
   const socket = useSocket(actualGroupId || undefined);
 
-  // Format timestamp for display
-  const formatTimestamp = (timestamp: string) => {
-    return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
-  };
+  // Request notification permission on component mount
+  useEffect(() => {
+    const requestNotificationPermission = async () => {
+      if (Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+    };
+    requestNotificationPermission();
+  }, []);
+
+  // Add visibility change listener
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabActive(!document.hidden);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   // Fetch messages
   const fetchMessages = async () => {
@@ -142,6 +155,28 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
 
     const handleNewMessage = (message: Message) => {
       console.log("New message received:", message);
+
+      // Only show notification and play sound for messages from others
+      if (message.user_id !== user?.id) {
+        // Play notification sound
+        notificationSound.current
+          .play()
+          .catch((err) => console.error("Error playing notification:", err));
+
+        // Show notification if tab is not active
+        if (!isTabActive) {
+          // Browser notification
+          if (Notification.permission === "granted") {
+            new Notification("New Message", {
+              body: `${message.user?.username}: ${message.content}`,
+              icon: message.user?.avatar || "/placeholder.svg",
+            });
+          }
+
+          // Toast notification
+          success(`New message from ${message.user?.username}`);
+        }
+      }
 
       // Only add message if it's not already in the list
       setMessages((prevMessages) => {
@@ -250,7 +285,7 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
       socket.offReactionAdded(handleReactionAdd);
       socket.offReactionRemoved(handleReactionRemove);
     };
-  }, [socket, actualGroupId, typingUsers]);
+  }, [socket, actualGroupId, typingUsers, user?.id, isTabActive]);
 
   // Listen for typing notifications
   useEffect(() => {
@@ -346,6 +381,18 @@ export function ChatMessages({ chatId, type }: ChatMessagesProps) {
       </div>
     );
   }
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith("image/")) return "📷";
+    if (fileType.startsWith("video/")) return "🎥";
+    if (fileType.startsWith("audio/")) return "🎵";
+    return "📄";
+  };
+
+  // Format timestamp for display
+  const formatTimestamp = (timestamp: string) => {
+    return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+  };
 
   return (
     <ScrollArea ref={scrollRef} className="flex-1 p-4">
