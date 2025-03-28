@@ -40,14 +40,28 @@ A real-time chat application backend API built with Express.js and Supabase.
    PORT=3000
    JWT_SECRET=your_jwt_secret_key
    CLIENT_URL=http://localhost:5173
+
+   # These Supabase credentials are essential for the app to work
    SUPABASE_URL=https://your-supabase-project-url.supabase.co
    SUPABASE_KEY=your-supabase-service-role-key
    ```
 
-4. Set up the Supabase database:
+   > ⚠️ **Important for Recruiters/Reviewers**: You must create a `.env` file with valid Supabase credentials before proceeding. The application will not work without these environment variables.
 
-   - Create a new Supabase project
-   - Run the SQL script in `supabase/migrations/create_all_tables.sql` in the Supabase SQL Editor
+4. Set up the database and populate with test data:
+
+   ```
+   # Initialize the database with tables and sample data
+   node create-tables-simple.js
+   ```
+
+   This script will:
+
+   - Create all necessary database tables in your Supabase project
+   - Populate the database with sample users and chat groups
+   - Set up relationships between users, groups, and messages
+
+   > 📝 **Note**: If you encounter any errors during this process, check that your Supabase credentials are correct and that your account has the appropriate permissions.
 
 5. Start the development server:
    ```
