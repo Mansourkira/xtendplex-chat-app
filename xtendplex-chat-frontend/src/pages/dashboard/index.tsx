@@ -13,9 +13,13 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Outlet, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
-export default function DashboardPage() {
+export default function DashboardPage({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const location = useLocation();
 
   // Function to determine breadcrumb title based on current path
@@ -24,6 +28,8 @@ export default function DashboardPage() {
     if (path.includes("/users/add")) return "Add User";
     if (path.includes("/users")) return "Users";
     if (path.includes("/chat")) return "Messages";
+    if (path.includes("/groups/add")) return "Add Group";
+    if (path.includes("/groups")) return "Groups";
     return "Dashboard";
   };
 
@@ -48,9 +54,7 @@ export default function DashboardPage() {
             </Breadcrumb>
           </div>
         </header>
-        <div className="flex flex-1 flex-col p-4 pt-0">
-          <Outlet />
-        </div>
+        <div className="flex flex-1 flex-col p-4 pt-0">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
