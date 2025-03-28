@@ -23,6 +23,14 @@ export const useSocket = (groupId?: string) => {
       setIsConnected(false);
     });
 
+    const connectErrorListener = SocketService.on(
+      "connect_error",
+      (error: Error) => {
+        console.error("Socket connect_error in hook:", error);
+        setIsConnected(false);
+      }
+    );
+
     // Check initial connection status
     setIsConnected(SocketService.isConnected());
 
@@ -33,6 +41,7 @@ export const useSocket = (groupId?: string) => {
       unsubscribe.current.forEach((unsub) => unsub());
       connectionStatusListener();
       disconnectListener();
+      connectErrorListener();
       unsubscribe.current = [];
     };
   }, []);
@@ -110,6 +119,10 @@ export const useSocket = (groupId?: string) => {
   // Function to add reaction to a message
   const addReaction = (messageId: string, reaction: string) => {
     if (!groupId || !isConnected) return;
+
+    console.log(
+      `Adding reaction ${reaction} to message ${messageId} in group ${groupId}`
+    );
     SocketService.addReaction(messageId, groupId, reaction);
   };
 
