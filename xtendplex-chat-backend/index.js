@@ -116,6 +116,7 @@ io.on("connection", (socket) => {
       userId: socket.user.uid,
       timestamp: new Date().toISOString(),
       receivedData: data,
+    });
   });
 
   // Handle join group
@@ -467,21 +468,6 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.user.uid);
     connectedUsers.delete(socket.user.uid);
-
-    // Update user status to offline
-    supabase
-      .from("users")
-      .update({
-        status: "offline",
-        last_seen: new Date(),
-      })
-      .eq("id", socket.user.uid)
-      .then(() => {
-        console.log("User status updated to offline");
-      })
-      .catch((error) => {
-        console.error("Error updating user status:", error);
-      });
   });
 });
 

@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS public.message_reactions (
   UNIQUE(message_id, user_id, reaction)
 );
 
+-- Create attachments table
+CREATE TABLE IF NOT EXISTS attachments (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  file_type TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Ensure RLS is disabled for these tables (for development)
 ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.groups DISABLE ROW LEVEL SECURITY;
@@ -81,6 +94,26 @@ ALTER TABLE public.group_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY; 
 ALTER TABLE public.message_attachments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+
+-- Add RLS policies for attachments
+ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Attachments are viewable by message recipients" ON attachments
+  FOR SELECT USING (
+    message_id IN (
+      SELECT id FROM messages WHERE
+        group_id IN (
+          SELECT group_id FROM group_members WHERE user_id = auth.uid()
+        )
+    )
+  );
+
+CREATE POLICY "Attachments can be created by message sender" ON attachments
+  FOR INSERT WITH CHECK (
+    auth.uid() IN (
+      SELECT user_id FROM messages WHERE id = message_id
+    )
+  );
 
 -- Create trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

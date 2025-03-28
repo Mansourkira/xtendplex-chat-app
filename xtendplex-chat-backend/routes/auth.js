@@ -7,7 +7,7 @@ const cors = require("cors");
 router.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: true,
   })
@@ -139,12 +139,14 @@ router.post("/login", async (req, res) => {
       const { data: userData, error: userError } = await supabase
         .from("users")
         .select("email")
+
         .eq("username", email)
         .single();
-
-      console.log("User data:", userData);
-      console.log("user error ", userError);
-      console.log("user data email", userData.email);
+      // update user status to online
+      await supabase
+        .from("users")
+        .update({ status: "online" })
+        .eq("id", userData.id);
       if (userError || !userData) {
         return res.status(400).json({ message: "Invalid credentials" });
       }
@@ -386,7 +388,7 @@ router.post("/logout", async (req, res) => {
 });
 
 // Add new endpoint to update user status
-router.patch("/status", async (req, res) => {
+router.put("/status", async (req, res) => {
   const { status } = req.body;
 
   if (!status || !["online", "offline", "away"].includes(status)) {
@@ -423,6 +425,12 @@ router.patch("/status", async (req, res) => {
     if (updateError) {
       return res.status(500).json({ message: "Failed to update status" });
     }
+
+    // After successful update, emit to all connected clients
+    req.io.emit("user_status_change", {
+      userId: user.id,
+      status: status,
+    });
 
     res.json({ message: "Status updated successfully", status });
   } catch (error) {

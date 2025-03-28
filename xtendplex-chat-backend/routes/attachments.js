@@ -2,13 +2,15 @@ const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middleware/auth");
 const supabase = require("../utils/supabase");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 
 // Upload a file attachment to a message
 router.post("/:messageId", verifyToken, async (req, res) => {
   const { file_path, file_type, file_name, file_size } = req.body;
 
   if (!file_path || !file_type || !file_name || !file_size) {
-    return res.status(400).json({ message: "All file details are required" });
+    return res.status(400).json({ message: "All file de/tails are required" });
   }
 
   try {
