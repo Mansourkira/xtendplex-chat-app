@@ -6,7 +6,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "setup-check": "node setup-check.js"
+    "setup-check": "node setup-check.js",
+    "fix-uuid": "node fix-uuid-issues.js",
+    "create-default-data": "node create-default-data.js",
+    "repair-schema": "node repair-schema.js"
   },
   "keywords": [],
   "author": "",
